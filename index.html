@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Karteikasten">
+<meta name="theme-color" content="#0d0d0d">
+<title>Karteikasten</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233987e5'/%3E%3Crect x='14' y='18' width='36' height='24' rx='4' fill='%23fff' opacity='.35'/%3E%3Crect x='18' y='24' width='36' height='24' rx='4' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+/* ---------- Design-Token ---------- */
+:root{
+  --bg:#0d0d0d; --surface:#1a1a19; --surface-2:#232322; --surface-3:#2c2c2a;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --line:#2c2c2a; --line-2:#383835;
+  --accent:#3987e5; --accent-soft:rgba(57,135,229,.14);
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --ord-1:#184f95; --ord-2:#256abf; --ord-3:#3987e5; --ord-4:#86b6ef;
+  --radius:14px; --radius-sm:9px;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.28);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f9f9f7; --surface:#fcfcfb; --surface-2:#f2f1ed; --surface-3:#e8e7e1;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --line:#e1e0d9; --line-2:#c3c2b7;
+  --accent:#2a78d6; --accent-soft:rgba(42,120,214,.10);
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --ord-1:#86b6ef; --ord-2:#3987e5; --ord-3:#256abf; --ord-4:#184f95;
+  --shadow:0 1px 2px rgba(11,11,11,.06),0 8px 24px rgba(11,11,11,.07);
+  color-scheme:light;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+a{color:var(--accent)}
+
+/* ---------- Grundgerüst ---------- */
+#app{min-height:100%;display:flex;flex-direction:column}
+header.top{
+  position:sticky;top:0;z-index:30;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:saturate(160%) blur(14px);
+  border-bottom:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
+}
+.top-row{display:flex;align-items:center;gap:12px;max-width:960px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:9px;font-weight:680;letter-spacing:-.02em}
+.brand .mark{width:22px;height:22px;border-radius:6px;background:var(--accent);flex:none;
+  display:grid;place-items:center;font-size:12px;color:#fff}
+.spacer{flex:1}
+nav.tabs{display:flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:11px}
+nav.tabs button{
+  padding:6px 13px;border-radius:8px;font-size:13.5px;font-weight:560;color:var(--ink-2);
+  transition:background .13s,color .13s;white-space:nowrap;
+}
+nav.tabs button[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+main{flex:1;max-width:960px;width:100%;margin:0 auto;padding:22px 16px calc(env(safe-area-inset-bottom) + 48px)}
+
+/* ---------- Bausteine ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:10px 16px;border-radius:10px;font-size:15px;font-weight:580;
+  background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+  transition:filter .13s,transform .06s;min-height:42px;
+}
+.btn:active{transform:scale(.985)}
+.btn:hover{filter:brightness(1.14)}
+.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--crit)}
+.btn.wide{width:100%}
+.btn.sm{padding:6px 11px;min-height:34px;font-size:13.5px;border-radius:8px}
+.btn:disabled{opacity:.4;cursor:default}
+input[type=text],input[type=date],input[type=number],select,textarea{
+  width:100%;padding:10px 12px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:10px;font-size:16px;outline:none;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+textarea{resize:vertical;min-height:84px;line-height:1.5}
+label.fld{display:block;margin-bottom:13px}
+label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-2);margin-bottom:5px;
+  text-transform:uppercase;letter-spacing:.05em}
+.hint{font-size:13px;color:var(--muted);line-height:1.5}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:99px;
+  font-size:11.5px;font-weight:620;letter-spacing:.02em;background:var(--surface-3);color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:99px;flex:none}
+.sec-title{font-size:12.5px;font-weight:620;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.07em;margin:0 0 11px}
+.empty{text-align:center;padding:44px 20px;color:var(--muted)}
+.empty h3{color:var(--ink-2);margin-bottom:7px;font-size:16px}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1;min-width:0}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- Startseite ---------- */
+.hero{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:22px;margin-bottom:22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap
+}
+.hero .big{font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.hero .sub{color:var(--ink-2);font-size:14.5px;margin-top:5px}
+.deck-list{display:grid;gap:11px}
+.deck{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:15px 16px;display:flex;align-items:center;gap:14px;
+  transition:border-color .13s;position:relative;overflow:hidden;
+}
+.deck:hover{border-color:var(--line-2)}
+.deck .stripe{position:absolute;left:0;top:0;bottom:0;width:3px}
+.deck .name{font-weight:620;font-size:15.5px;letter-spacing:-.01em;line-height:1.3;
+  hyphens:auto;-webkit-hyphens:auto}
+.deck .meta{font-size:13px;color:var(--muted);margin-top:3px;display:flex;gap:9px;flex-wrap:wrap}
+.counts{display:flex;gap:5px;align-items:center;flex:none}
+.count{min-width:30px;text-align:center;padding:4px 7px;border-radius:8px;font-size:13px;
+  font-weight:640;font-variant-numeric:tabular-nums}
+.count.n{background:rgba(57,135,229,.16);color:var(--ord-4)}
+.count.r{background:rgba(12,163,12,.15);color:var(--good)}
+.count.z{background:var(--surface-2);color:var(--muted)}
+:root[data-theme="light"] .count.n{color:var(--ord-4)}
+.exam-tag{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+.exam-tag.urgent{color:var(--serious)}
+.exam-tag.critical{color:var(--crit);font-weight:640}
+.focus-banner{
+  display:flex;align-items:flex-start;gap:12px;margin:-8px 0 20px;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--serious);
+  border-radius:var(--radius);padding:13px 15px
+}
+.focus-banner .fb-dot{width:9px;height:9px;border-radius:99px;flex:none;margin-top:7px}
+.focus-banner b{font-size:14.5px}
+.group-head{display:flex;align-items:baseline;gap:10px;margin:16px 2px 3px;font-size:12.5px}
+.group-head:first-child{margin-top:0}
+.group-head .gh-name{font-weight:660;color:var(--ink-2);letter-spacing:.02em}
+.group-head .gh-days{color:var(--muted);font-variant-numeric:tabular-nums}
+.group-head .gh-days.near{color:var(--serious);font-weight:620}
+.group-head .gh-due{color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ---------- Lernansicht ---------- */
+.review-wrap{max-width:680px;margin:0 auto}
+.rev-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.rev-counts{display:flex;gap:14px;font-size:13.5px;font-variant-numeric:tabular-nums;font-weight:600}
+.rev-counts span{display:flex;align-items:center;gap:5px}
+.progress{height:3px;background:var(--surface-3);border-radius:99px;overflow:hidden;margin-bottom:20px}
+.progress > i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
+.qcard{
+  background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  padding:30px 26px;min-height:210px;display:flex;flex-direction:column;
+  justify-content:center;text-align:center;box-shadow:var(--shadow)
+}
+.qcard .pillrow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:0 0 15px}
+.qtext{font-size:22px;line-height:1.42;font-weight:560;letter-spacing:-.015em}
+.divider{height:1px;background:var(--line);margin:24px -26px}
+.atext{font-size:18px;line-height:1.6;color:var(--ink);text-align:left;font-weight:420}
+.anote{
+  margin-top:18px;padding:13px 15px;background:var(--surface-2);border-radius:10px;
+  border-left:2px solid var(--accent);font-size:14.5px;line-height:1.6;color:var(--ink-2);text-align:left
+}
+.anote b{color:var(--ink)}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:18px}
+.grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:18px}
+.grade{
+  padding:13px 6px 11px;border-radius:12px;background:var(--surface-2);
+  border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:filter .12s,transform .06s
+}
+.grade:hover{filter:brightness(1.2)}
+.grade:active{transform:scale(.97)}
+.grade .lbl{font-size:14px;font-weight:620}
+.grade .iv{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;font-weight:560}
+.grade[data-g="1"] .lbl{color:var(--crit)}
+.grade[data-g="2"] .lbl{color:var(--serious)}
+.grade[data-g="3"] .lbl{color:var(--accent)}
+.grade[data-g="4"] .lbl{color:var(--good)}
+.kbd{display:inline-block;min-width:17px;padding:1px 4px;border-radius:4px;background:var(--surface-3);
+  border:1px solid var(--line-2);font-size:10.5px;color:var(--muted);font-weight:600;line-height:1.4}
+.done-screen{text-align:center;padding:56px 20px}
+.done-screen .tick{width:56px;height:56px;border-radius:99px;background:rgba(12,163,12,.15);
+  color:var(--good);display:grid;place-items:center;margin:0 auto 18px;font-size:26px}
+
+/* ---------- Verwalten ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);font-weight:620;padding:0 10px 9px;border-bottom:1px solid var(--line)}
+.tbl td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr.clickable:hover td{background:var(--surface-2)}
+.state-badge{font-size:11px;font-weight:620;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.st-new{background:rgba(24,79,149,.3);color:var(--ord-4)}
+.st-learning{background:rgba(250,178,25,.15);color:var(--warn)}
+.st-review{background:rgba(12,163,12,.14);color:var(--good)}
+.st-relearning{background:rgba(208,59,59,.15);color:var(--crit)}
+:root[data-theme="light"] .st-new{background:rgba(42,120,214,.14);color:#184f95}
+
+/* ---------- Statistik ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:11px;margin-bottom:22px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px}
+.kpi .v{font-size:27px;font-weight:680;letter-spacing:-.03em;line-height:1.15}
+.kpi .k{font-size:12.5px;color:var(--muted);margin-top:3px;font-weight:540}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:17px 17px 13px;margin-bottom:16px}
+.chart h3{font-size:14.5px;margin-bottom:2px}
+.chart .csub{font-size:12.5px;color:var(--muted);margin-bottom:16px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:132px;position:relative;
+  border-bottom:1px solid var(--line-2);padding-bottom:0}
+.bars .gridline{position:absolute;left:0;right:0;border-top:1px dashed var(--line);pointer-events:none}
+.bars .gridline span{position:absolute;left:0;top:-8px;font-size:10px;color:var(--muted);
+  background:var(--surface);padding:0 4px 0 0;font-variant-numeric:tabular-nums}
+.bar{flex:1;position:relative;display:flex;align-items:flex-end;justify-content:center;height:100%;
+  min-width:0;border-radius:4px 4px 0 0}
+.bar > i{display:block;width:100%;background:var(--accent);border-radius:4px 4px 0 0;
+  transition:filter .12s}
+.bar > i[style*="height: 0"]{min-height:0}
+.bar.nz > i{min-height:3px}
+.bar:hover > i{filter:brightness(1.3)}
+.bar .val{position:absolute;top:-17px;font-size:10.5px;font-weight:640;color:var(--ink-2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar .tip{
+  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:var(--surface-3);border:1px solid var(--line-2);border-radius:8px;
+  padding:6px 10px;font-size:12px;white-space:nowrap;opacity:0;pointer-events:none;
+  transition:opacity .12s;z-index:5;box-shadow:var(--shadow);font-variant-numeric:tabular-nums
+}
+.bar:hover .tip{opacity:1}
+.xaxis{display:flex;gap:2px;margin-top:7px}
+.xaxis > div{flex:1;text-align:center;font-size:10px;color:var(--muted);min-width:0;
+  overflow:hidden;font-variant-numeric:tabular-nums}
+.stackbar{display:flex;gap:2px;height:34px;border-radius:8px;overflow:hidden;margin-bottom:13px}
+.stackbar > div{transition:filter .12s;position:relative}
+.stackbar > div:hover{filter:brightness(1.25)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px}
+.legend .li{display:flex;align-items:center;gap:7px;color:var(--ink-2)}
+.legend .li b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:640}
+
+/* ---------- Dialoge ---------- */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;
+  align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
+.modal{background:var(--surface);border:1px solid var(--line-2);border-radius:16px;
+  width:100%;max-width:540px;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow);
+  padding:22px;-webkit-overflow-scrolling:touch}
+.modal h2{font-size:18px;margin-bottom:16px}
+.modal-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.toast{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(env(safe-area-inset-bottom) + 22px);
+  background:var(--surface-3);border:1px solid var(--line-2);border-radius:11px;
+  padding:11px 18px;font-size:14px;box-shadow:var(--shadow);z-index:200;
+  animation:pop .2s ease-out;max-width:calc(100vw - 32px);text-align:center
+}
+@keyframes pop{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* ---------- Mobil ---------- */
+@media(max-width:620px){
+  main{padding:16px 13px calc(env(safe-area-inset-bottom) + 40px)}
+  .brand span.t{display:none}
+  nav.tabs button{padding:7px 10px;font-size:13px}
+  .hero{padding:18px;gap:14px}
+  .hero .big{font-size:36px}
+  .qcard{padding:24px 19px;min-height:180px}
+  .qtext{font-size:19.5px}
+  .atext{font-size:16.5px}
+  .divider{margin:20px -19px}
+  .grades{gap:6px}
+  .grade{padding:12px 3px 10px}
+  .grade .lbl{font-size:13px}
+  .grade .iv{font-size:10.5px}
+  .kbd,.keyhelp{display:none}
+  .tbl td.hide-s,.tbl th.hide-s{display:none}
+  .kpi .v{font-size:23px}
+}
+@media print{.no-print{display:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+/* ==========================================================================
+   1. FSRS-4.5 — Terminplanung
+   Getestet in test_fsrs.js: Umkehrbarkeit der Vergessenskurve, Monotonie
+   der Intervalle, Lapse-Verhalten, Prüfungsdeckel, 20 000 Zufallsdurchläufe
+   ohne NaN, sowie eine 120-Tage-Simulation über 1000 Karten (89,3 % Treffer
+   bei 90 % Zielretention).
+   ========================================================================== */
+const DEFAULT_W=[0.4872,1.4003,3.7145,13.8206,5.1618,1.2298,0.8975,0.0310,
+                 1.6474,0.1367,1.0461,2.1072,0.0793,0.3246,1.5870,0.2272,2.8755];
+const DECAY=-0.5, FACTOR=Math.pow(0.9,1/DECAY)-1;
+const MIN=60000, DAY=86400000;
+const LEARNING_STEPS=[1*MIN,10*MIN], RELEARNING_STEPS=[10*MIN];
+const clampD=d=>Math.min(Math.max(d,1),10), clampS=s=>Math.max(s,0.01);
+
+const retrievability=(t,S)=>S<=0?0:Math.pow(1+FACTOR*t/S,DECAY);
+const intervalForRetention=(S,req)=>(S/FACTOR)*(Math.pow(req,1/DECAY)-1);
+const initialStability=(w,g)=>clampS(w[g-1]);
+const initialDifficulty=(w,g)=>clampD(w[4]-(g-3)*w[5]);
+function nextDifficulty(w,D,g){
+  const delta=D-w[6]*(g-3);
+  return clampD(w[7]*initialDifficulty(w,4)+(1-w[7])*delta);
+}
+function stabilityAfterRecall(w,D,S,r,g){
+  const hard=g===2?w[15]:1, easy=g===4?w[16]:1;
+  return clampS(S*(1+Math.exp(w[8])*(11-D)*Math.pow(S,-w[9])*
+    (Math.exp(w[10]*(1-r))-1)*hard*easy));
+}
+function stabilityAfterLapse(w,D,S,r){
+  return clampS(w[11]*Math.pow(D,-w[12])*(Math.pow(S+1,w[13])-1)*Math.exp(w[14]*(1-r)));
+}
+function newCardState(){
+  return {state:'new',due:null,stability:null,difficulty:null,reps:0,lapses:0,
+          step:0,lastReview:null,scheduledDays:0};
+}
+function schedule(card,grade,now,opts){
+  opts=opts||{};
+  const w=opts.w||DEFAULT_W, request=opts.desiredRetention||0.9;
+  const maxInterval=opts.maximumInterval||1095, nowMs=now.getTime();
+  const next=Object.assign({},card);
+  next.reps=(card.reps||0)+1;
+  next.lastReview=new Date(nowMs).toISOString();
+  const elapsed=(card.lastReview&&card.state==='review')
+    ? Math.max(0,(nowMs-new Date(card.lastReview).getTime())/DAY) : 0;
+
+  if(card.state==='new'||card.stability==null){
+    next.difficulty=initialDifficulty(w,grade);
+    next.stability=initialStability(w,grade);
+  }else{
+    const r=card.state==='review'?retrievability(elapsed,card.stability):1;
+    next.difficulty=nextDifficulty(w,card.difficulty,grade);
+    next.stability=grade===1
+      ? stabilityAfterLapse(w,card.difficulty,card.stability,r)
+      : stabilityAfterRecall(w,card.difficulty,card.stability,r,grade);
+  }
+  const wasReview=card.state==='review';
+  if(grade===1&&wasReview) next.lapses=(card.lapses||0)+1;
+
+  const inLearning=card.state==='new'||card.state==='learning';
+  const inRelearning=card.state==='relearning'||(grade===1&&wasReview);
+
+  if(grade===4&&(inLearning||inRelearning)){ next.state='review'; next.step=0; }
+  else if(inLearning){
+    let step=card.state==='new'?0:(card.step||0);
+    if(grade===1) step=0; else if(grade===3) step+=1;
+    if(step>=LEARNING_STEPS.length){ next.state='review'; next.step=0; }
+    else{ next.state='learning'; next.step=step; next.scheduledDays=0;
+          next.due=new Date(nowMs+LEARNING_STEPS[step]).toISOString(); return next; }
+  }
+  else if(inRelearning){
+    let step=card.state==='relearning'?(card.step||0):0;
+    if(grade===1) step=0; else if(grade===3) step+=1;
+    if(step>=RELEARNING_STEPS.length){ next.state='review'; next.step=0; }
+    else{ next.state='relearning'; next.step=step; next.scheduledDays=0;
+          next.due=new Date(nowMs+RELEARNING_STEPS[step]).toISOString(); return next; }
+  }
+  else{ next.state='review'; next.step=0; }
+
+  let days=Math.min(Math.max(Math.round(intervalForRetention(next.stability,request)),1),maxInterval);
+  const examMs=opts.examDate?new Date(opts.examDate).getTime():null;
+  if(examMs&&examMs>nowMs){
+    const d2e=(examMs-nowMs)/DAY;
+    days=Math.min(days, d2e<=3?1:Math.max(1,Math.floor(d2e*0.6)));
+  }
+  let dueMs=nowMs+days*DAY;
+  if(examMs&&examMs>nowMs&&dueMs>examMs){ dueMs=examMs; days=Math.max(0,Math.round((dueMs-nowMs)/DAY)); }
+  next.scheduledDays=days;
+  next.due=new Date(dueMs).toISOString();
+  return next;
+}
+
+/* ==========================================================================
+   2. Zustand & Speicherung
+   ========================================================================== */
+const LS='karteikasten.v1';
+const DECK_COLORS=['#3987e5','#d95926','#199e70','#c98500','#d55181','#9085e9'];
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+/* Die acht Fächer des Geprüften Technischen Fachwirts, gruppiert nach den drei
+   Prüfungsterminen. Mehrere Stapel teilen sich denselben Termin — die
+   Fokusphase behandelt sie deshalb als eine Einheit. */
+const FACHWIRT=[
+  ['Naturwissenschaftliche und technische Grundlagen','2026-09-23','#3987e5'],
+  ['Technische Kommunikation und Werkstofftechnologie','2026-09-23','#d95926'],
+  ['Fertigungs- und Betriebstechnik','2026-09-23','#199e70'],
+  ['Volks- und Betriebswirtschaft','2026-10-21','#c98500'],
+  ['Rechnungswesen','2026-10-21','#d55181'],
+  ['Recht und Steuern','2026-10-21','#9085e9'],
+  ['Unternehmensführung','2026-10-21','#3987e5'],
+  ['Handlungsspezifische Qualifikation','2026-12-02','#d95926']
+];
+function defaultState(){
+  const decks=FACHWIRT.map((f,i)=>({id:uid()+i,name:f[0],examDate:f[1],color:f[2],
+                                    created:Date.now()+i}));
+  return {
+    v:1, decks:decks, cards:[], log:[],
+    settings:{desiredRetention:0.9,newPerDay:40,maximumInterval:1095,theme:'dark',
+              interleave:true,retryGap:3,focusDays:14,focusPeak:0.8,newMode:'auto'}
+  };
+}
+const DEFAULT_SETTINGS={desiredRetention:0.9,newPerDay:40,maximumInterval:1095,
+                        theme:'dark',interleave:true,retryGap:3,
+                        focusDays:14,focusPeak:0.8,newMode:'auto'};
+
+let S;
+try{
+  const raw=localStorage.getItem(LS);
+  S = raw ? JSON.parse(raw) : defaultState();
+}catch(e){ S=defaultState(); }
+if(!S||!S.decks) S=defaultState();
+S.settings=Object.assign({},DEFAULT_SETTINGS,S.settings||{});
+S.log=S.log||[]; S.cards=S.cards||[]; S.decks=S.decks||[];
+
+let saveWarned=false;
+function save(){
+  try{ localStorage.setItem(LS,JSON.stringify(S)); }
+  catch(e){
+    if(!saveWarned){ saveWarned=true;
+      toast('Speicher voll — bitte unter Einstellungen sichern und aufräumen.',6000); }
+  }
+}
+
+/* ==========================================================================
+   3. Hilfsfunktionen
+   ========================================================================== */
+function esc(s){ return String(s==null?'':s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* Sehr kleine Auszeichnungssprache: **fett**, *kursiv*, `code`, Zeilenumbrüche,
+   Aufzählungen mit "- " am Zeilenanfang. */
+function fmt(s){
+  let t=esc(s);
+  t=t.replace(/`([^`]+)`/g,'<code style="background:var(--surface-3);padding:1px 5px;border-radius:4px;font-size:.9em">$1</code>');
+  t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+  t=t.replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<i>$2</i>');
+  const lines=t.split('\n'); let out='',inList=false;
+  for(const ln of lines){
+    const m=ln.match(/^\s*[-•]\s+(.*)$/);
+    if(m){ if(!inList){ out+='<ul style="margin:8px 0;padding-left:20px">'; inList=true; }
+           out+='<li style="margin:3px 0">'+m[1]+'</li>'; }
+    else{ if(inList){ out+='</ul>'; inList=false; }
+          out+= ln.trim()==='' ? '<div style="height:8px"></div>' : '<div>'+ln+'</div>'; }
+  }
+  if(inList) out+='</ul>';
+  return out;
+}
+
+const startOfDay=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x;};
+const dayKey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+
+function fmtDelta(ms){
+  if(ms<0) ms=0;
+  const m=ms/MIN;
+  if(m<60) return Math.max(1,Math.round(m))+' Min.';
+  if(m<60*24) return Math.round(m/60)+' Std.';
+  const d=ms/DAY;
+  if(d<30.4) return Math.round(d)+(Math.round(d)===1?' Tag':' Tage');
+  if(d<365) return (d/30.4).toFixed(d/30.4<10?1:0).replace('.',',')+' Mon.';
+  return (d/365).toFixed(1).replace('.',',')+' J.';
+}
+function fmtDateDE(d){
+  if(!d) return '';
+  const x=new Date(d);
+  return String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+x.getFullYear();
+}
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  return Math.ceil((startOfDay(dateStr)-startOfDay(new Date()))/DAY);
+}
+const deckById=id=>S.decks.find(d=>d.id===id);
+function schedOpts(deckId){
+  const d=deckById(deckId);
+  return {desiredRetention:S.settings.desiredRetention,
+          maximumInterval:S.settings.maximumInterval,
+          examDate:d&&d.examDate?d.examDate+'T08:00:00':null};
+}
+
+/* ---- Fokusphase vor einer Prüfung ----------------------------------------
+   Ab `focusDays` Tagen vor einem Termin verschiebt sich die Zusammensetzung
+   der Sitzung allmählich zugunsten dieses Fachs — bei 14 Tagen kaum spürbar,
+   am Prüfungstag fast vollständig. Der Anstieg ist bewusst überproportional
+   (Exponent 1,5), damit die ersten Tage des Fensters noch normal wirken.
+
+   Es wird nie ganz umgeschaltet: `focusPeak` begrenzt den Anteil, der Rest
+   bleibt als Erhaltungsdosis bei den anderen Fächern. Ohne diese Dosis
+   stauten sich dort während des Fensters mehrere hundert überfällige Karten,
+   die dann ausgerechnet vor dem nächsten Termin auf einen warten.
+
+   Wichtig ist, WAS hier gleitend hochgefahren wird: nicht der Zielanteil,
+   sondern die Durchsetzungskraft. Der frühere Ansatz, den Zielanteil selbst
+   ansteigen zu lassen, hatte einen versteckten Haken — ein Fach mit nahem
+   Termin bekommt allein durch die Dringlichkeitsgewichtung schon rund 60 %.
+   Ein anfänglicher Zielwert von 40 % hätte es also ausgerechnet zu Beginn
+   des Fensters ausgebremst. Jetzt gilt das Ziel von Anfang an, nur greift
+   die Steuerung bei ramp = 0 gar nicht ein und wird dann immer bestimmter.
+   Bei ramp = 0 ist die Fokusphase damit nachweislich wirkungslos.
+
+   Ein Termin kann mehrere Fächer betreffen — der Technische Fachwirt prüft
+   am 23.09. drei Fächer an einem Tag. Die Fokusphase gilt deshalb für alle
+   Stapel mit demselben nächsten Termin, nicht für einen einzelnen.
+   -------------------------------------------------------------------------- */
+function focusState(){
+  const fd=S.settings.focusDays|0;
+  if(fd<=0) return null;
+  let soonest=null;
+  for(const d of S.decks){
+    const u=daysUntil(d.examDate);
+    if(u==null||u<0||u>fd) continue;
+    if(soonest==null||u<soonest) soonest=u;
+  }
+  if(soonest==null) return null;
+  const decks=S.decks.filter(d=>daysUntil(d.examDate)===soonest);
+  const ids={};
+  decks.forEach(d=>{ids[d.id]=true;});
+  const ramp=Math.min(1,Math.max(0,(fd-soonest)/fd));
+  return {ids:ids, decks:decks, days:soonest, ramp:ramp,
+          label: decks.length===1 ? decks[0].name
+               : decks.length+' Fächer am '+fmtDateDE(decks[0].examDate),
+          color: decks[0].color,
+          target:Math.min(1,Math.max(0.4,S.settings.focusPeak)),
+          strength:Math.pow(ramp,1.5)};
+}
+
+/* ---- Taktung neuer Karten -------------------------------------------------
+   Im Modus „auto" rechnet die App je Stapel: verbleibende neue Karten geteilt
+   durch Tage bis zur Prüfung. Damit ergibt sich der Tagestakt von selbst und
+   jedes Fach wird rechtzeitig fertig, statt dass die nächste Prüfung das
+   ganze Budget frisst und Rechnungswesen erst im Oktober anfängt.
+
+   Reicht die Obergrenze nicht für alle Fächer, wird anteilig gekürzt statt
+   ein Fach ganz fallen zu lassen — und die Startseite sagt offen, dass es
+   rechnerisch nicht aufgeht. Stilles Scheitern wäre hier das Schlimmste.
+   -------------------------------------------------------------------------- */
+/* Ein Stapel ohne Termin hat keinen Nenner. „Restkarten durch 60 Tage" wäre
+   die naheliegende Formel, ergibt bei kleinen Stapeln aber eine Karte pro Tag
+   und lässt die App wie kaputt wirken. Ohne Termin gilt deshalb ein fester,
+   ruhiger Takt — begrenzt durch das, was überhaupt noch offen ist. */
+const NO_EXAM_DAILY=10;
+/* Untergrenze je Stapel. „Restkarten durch Tage" allein rechnet zu träge,
+   solange täglich neuer Stoff dazukommt: 15 Karten auf 42 Tage ergäbe eine
+   Karte am Tag, während der Unterricht längst weiter ist. Die Untergrenze
+   sorgt dafür, dass Angekommenes zügig in den Umlauf geht — begrenzt durch
+   das, was überhaupt noch offen ist. */
+const MIN_DAILY_PER_DECK=3;
+function pacePlan(now){
+  now=now||new Date();
+  const todayKey=dayKey(now);
+  const byId={};
+  for(const c of S.cards) byId[c.id]=c;
+  const usedByDeck={}; let usedTotal=0;
+  for(const l of S.log){
+    if(l.d!==todayKey||l.was!=='new') continue;
+    const c=byId[l.c]; if(!c) continue;
+    usedByDeck[c.deckId]=(usedByDeck[c.deckId]||0)+1; usedTotal++;
+  }
+  const ceiling=Math.max(0,S.settings.newPerDay|0);
+
+  if(S.settings.newMode!=='auto'){
+    const fs=focusState();
+    const eff=Math.round(ceiling*(fs?1+fs.ramp:1));
+    return {mode:'fixed',ceiling:eff,usedTotal:usedTotal,
+            total:Math.max(0,eff-usedTotal),need:null,required:0,capped:false};
+  }
+
+  const need={}; let required=0;
+  for(const d of S.decks){
+    const remaining=S.cards.filter(c=>c.deckId===d.id&&c.state==='new').length;
+    if(!remaining){ need[d.id]=0; continue; }
+    const u=daysUntil(d.examDate);
+    need[d.id]=(u==null||u<0)
+      ? Math.min(remaining,NO_EXAM_DAILY)
+      : Math.min(remaining,Math.max(MIN_DAILY_PER_DECK,
+                                    Math.ceil(remaining/Math.max(1,u))));
+    required+=need[d.id];
+  }
+
+  let alloc=need, capped=false;
+  if(ceiling>0&&required>ceiling){
+    capped=true;
+    alloc={};
+    const active=S.decks.filter(d=>need[d.id]>0)
+      .sort((a,b)=>{const x=daysUntil(a.examDate),y=daysUntil(b.examDate);
+                    return (x==null?9999:x)-(y==null?9999:y);});
+    let left=ceiling;
+    for(const d of active) { alloc[d.id]=0; }
+    // jedes laufende Fach bekommt mindestens eine Karte, dann anteilig
+    for(const d of active){ if(left<=0) break; alloc[d.id]=1; left--; }
+    for(const d of active){
+      if(left<=0) break;
+      const extra=Math.min(left,Math.max(0,Math.floor(need[d.id]/required*ceiling)-1));
+      alloc[d.id]+=extra; left-=extra;
+    }
+    for(const d of active){ // Rest an die dringendsten
+      if(left<=0) break;
+      const room=need[d.id]-alloc[d.id];
+      const add=Math.min(left,Math.max(0,room));
+      alloc[d.id]+=add; left-=add;
+    }
+  }
+
+  const budget={};
+  for(const d of S.decks) budget[d.id]=Math.max(0,(alloc[d.id]||0)-(usedByDeck[d.id]||0));
+  return {mode:'auto',ceiling:ceiling,usedTotal:usedTotal,budget:budget,
+          need:need,alloc:alloc,required:required,capped:capped};
+}
+
+/* Karten, die jetzt anstehen. Neue Karten werden auf das Tagesbudget begrenzt. */
+function queueFor(deckId,now){
+  now=now||new Date();
+  const t=now.getTime();
+  const pool=S.cards.filter(c=>!deckId||c.deckId===deckId);
+  const learning=[],review=[],fresh=[];
+  for(const c of pool){
+    if(c.state==='new') fresh.push(c);
+    else if(!c.due) review.push(c);
+    else if(new Date(c.due).getTime()<=t){
+      (c.state==='learning'||c.state==='relearning'?learning:review).push(c);
+    }
+  }
+  const urg=c=>{const d=deckById(c.deckId);const u=daysUntil(d&&d.examDate);
+                return u==null||u<0?9999:u;};
+  review.sort((a,b)=>urg(a)-urg(b)||new Date(a.due)-new Date(b.due));
+  fresh.sort((a,b)=>urg(a)-urg(b)||a.created-b.created);
+  learning.sort((a,b)=>new Date(a.due)-new Date(b.due));
+
+  const plan=pacePlan(now);
+  let take;
+  if(plan.mode==='auto'){
+    take=[]; const used={};
+    for(const c of fresh){
+      const b=plan.budget[c.deckId]||0, u=used[c.deckId]||0;
+      if(u<b){ take.push(c); used[c.deckId]=u+1; }
+    }
+  }else{
+    take=fresh.slice(0,plan.total);
+  }
+  return {learning:learning,review:review,fresh:take,plan:plan};
+}
+function dueCount(deckId){
+  const q=queueFor(deckId);
+  return {due:q.learning.length+q.review.length, fresh:q.fresh.length};
+}
+
+/* ==========================================================================
+   4. Sitzungssteuerung
+   ========================================================================== */
+let view='home', session=null, modal=null, undoStack=[], toastTimer=null;
+
+function startSession(deckId){
+  const q=queueFor(deckId);
+  const total=q.learning.length+q.review.length+q.fresh.length;
+  if(total===0){ toast('In diesem Stapel steht gerade nichts an.'); return; }
+  const ids=[].concat(q.learning.map(c=>c.id),q.review.map(c=>c.id),q.fresh.map(c=>c.id));
+  /* Der Fokus gilt nur für gemischte Sitzungen. Wer bewusst einen einzelnen
+     Stapel wählt, will genau diesen lernen — da hat die App nicht umzulenken. */
+  session={deckId:deckId,pool:ids,done:0,planned:total,shown:false,current:null,
+           startedAt:Date.now(),recent:[],retry:{},
+           focus:deckId?null:focusState(),focusCount:0,lastSeen:{}};
+  pickNext(); view='review'; render();
+}
+
+/* Thema einer Karte: das erste Schlagwort, ersatzweise ihr Stapel.
+   Danach richtet sich die Verschränkung innerhalb eines Stapels. */
+function topicOf(c){
+  if(c.tags&&c.tags.length&&String(c.tags[0]).trim()) return String(c.tags[0]).trim().toLowerCase();
+  return null;
+}
+
+/* Wie wackelig sitzt eine Karte? 0 = fest verankert, 1 = gar nicht.
+   Speist sich aus dem, was FSRS ohnehin über jede Karte weiß: wie oft sie
+   schon vergessen wurde, wie schwer sie eingestuft ist und wie kurz ihr
+   Abstand noch ist. Im Fokusfenster entscheidet das mit über die Reihenfolge. */
+function weakness(c){
+  if(c.state==='learning'||c.state==='relearning') return 0.9;
+  if(c.state==='new') return 0.7;
+  const lapse=Math.min(c.lapses||0,5)/5;
+  const diff=((c.difficulty||5)-1)/9;
+  const shaky=Math.max(0,1-(c.stability||1)/21);
+  return Math.min(1,lapse*0.4+diff*0.25+shaky*0.35);
+}
+
+/* ---- Auswahl der nächsten Karte -------------------------------------------
+   Zwei Prinzipien greifen hier ineinander:
+
+   Verteiltes Lernen — welche Karte überhaupt in Frage kommt, entscheidet
+   FSRS über das Fälligkeitsdatum. Zusätzlich holt die Sitzung eine gerade
+   falsch beantwortete Karte nach wenigen anderen Karten zurück, unabhängig
+   von der Uhr, damit sie noch im selben Durchgang sitzt.
+
+   Verschränkung — unter den fälligen Karten gewinnt nicht stur die
+   dringendste, sondern die mit dem besten Gesamtwert. Gleicher Stapel oder
+   gleiches Thema wie eben gerade kostet Punkte, sodass sich die Themen von
+   selbst abwechseln, solange Alternativen da sind. Gibt es keine, greift die
+   Strafe ins Leere und die Karte kommt trotzdem — gemischt wird nie auf
+   Kosten der Vollständigkeit.
+   -------------------------------------------------------------------------- */
+function pickNext(){
+  if(!session) return;
+  const now=Date.now();
+  const gap=S.settings.retryGap|0;
+  const cards=session.pool.map(id=>S.cards.find(c=>c.id===id)).filter(Boolean);
+
+  const retryDue=c=>gap>0&&(c.state==='learning'||c.state==='relearning')&&
+                    session.retry[c.id]!=null&&session.done>=session.retry[c.id];
+  const ready=c=>c.state==='new'||!c.due||new Date(c.due).getTime()<=now||retryDue(c);
+  const soon=c=>c.due&&(c.state==='learning'||c.state==='relearning')&&
+                new Date(c.due).getTime()<=now+20*MIN;
+
+  let cand=cards.filter(ready);
+  if(!cand.length) cand=cards.filter(soon);
+  if(!cand.length){ session.current=null; session.shown=false; return; }
+
+  const mix=S.settings.interleave!==false;
+  const last=session.recent[0]?cards.find(c=>c.id===session.recent[0]):null;
+  const last2=session.recent[1]?cards.find(c=>c.id===session.recent[1]):null;
+
+  /* ---- Anteilssteuerung der Fokusphase ------------------------------------
+     Als Zuschlag auf die Bewertung war das nicht in den Griff zu bekommen:
+     liegen die Termine weit auseinander, ist der Vorsprung des nahen Fachs
+     aus der Dringlichkeit allein rund 30 Punkte, und jeder Regler, der da
+     mithalten soll, überfährt alles andere. In Messungen liefen dann 23
+     Karten desselben Fachs am Stück durch, bei einem Anteil von 90 statt
+     80 Prozent.
+
+     Stattdessen jetzt eine echte Quote: vor jeder Karte wird entschieden, ob
+     sie aus dem Prüfungsfach kommen muss oder aus den übrigen — und zwar nur
+     mit der Wahrscheinlichkeit `strength`. Bei ramp = 0 wird nie eingegriffen,
+     die App verhält sich dann exakt wie ohne Fokusphase. Bei ramp = 1 greift
+     die Quote immer und der Anteil trifft den Zielwert genau. Dazwischen
+     mischt sich beides im Verhältnis. Innerhalb der gewählten Gruppe
+     entscheidet danach ganz normal die übliche Bewertung.
+     ------------------------------------------------------------------------ */
+  const fs=session.focus;
+  if(fs&&cand.length>1&&Math.random()<fs.strength){
+    const sh=session.done?session.focusCount/session.done:0;
+    const wantFocus=sh<fs.target;
+    const group=cand.filter(c=>(!!fs.ids[c.deckId])===wantFocus);
+    if(group.length) cand=group;
+  }
+
+  const scored=cand.map(c=>{
+    let s=0;
+    // Prüfungsnähe: je näher der Termin, desto höher die Dringlichkeit.
+    // Ein bereits vergangener Termin macht ein Fach nicht dringend, sondern
+    // lässt es entspannt weiterlaufen.
+    const d=deckById(c.deckId), u=daysUntil(d&&d.examDate);
+    if(u==null) s+=30;
+    else if(u<0) s+=36;
+    else s+=Math.min(30,u*0.35);
+    // Vergessenes zuerst, Neues zuletzt
+    if(c.state==='learning'||c.state==='relearning') s-=22;
+    else if(c.state==='new') s+=14;
+    // Rückstand aufholen
+    if(c.state==='review'&&c.due){
+      s -= Math.min(30,Math.max(0,(now-new Date(c.due).getTime())/DAY))*0.6;
+    }
+    // im Fokusfenster zuerst das, was erkennbar noch nicht sitzt
+    if(fs&&fs.ids[c.deckId]) s -= weakness(c)*16*fs.ramp;
+    /* Aushungerschutz: ein Fach, das in dieser Sitzung lange nicht dran war,
+       rückt nach vorn. Ohne das ginge die Erhaltungsdosis im Fokusfenster
+       immer an dasselbe zweitdringendste Fach, während das dritte leer ausgeht.
+       Im Blockmodus bleibt er aus — dort sind Blöcke ja gerade der Zweck. */
+    if(mix){
+      const seenAt=session.lastSeen[c.deckId];
+      const since=seenAt==null?session.done+1:session.done-seenAt;
+      s -= Math.min(14,since*0.35);
+    }
+    if(mix&&last){
+      /* Verschränkung. Die Strafe für „nochmal dasselbe" ist bewusst kleiner
+         als der Abstand zwischen einer nahen und einer fernen Prüfung: sonst
+         käme stur abwechselnd je eine Karte pro Fach und die Dringlichkeit
+         hätte keine Wirkung mehr. Der Zuschlag für den dritten Treffer in
+         Folge ist dagegen so hoch, dass Blöcke ausgeschlossen bleiben. */
+      /* Die Fachebene der Verschränkung wird im Fokusfenster genau so weit
+         gelockert, wie der Fokus zunimmt — bei 80 % Anteil ginge es sonst
+         gar nicht auf. Die Themenebene darunter bleibt unangetastet: auch in
+         der heißen Phase wird quer durch die Kapitel gefragt, und genau die
+         Ebene ist es, die in der Prüfung zählt. */
+      /* Nicht ganz auf null: ein Restwiderstand verhindert, dass in der
+         heißen Phase zwanzig Karten desselben Fachs am Stück durchlaufen. */
+      const relax=(fs&&fs.ids[c.deckId])?Math.max(0.25,1-fs.ramp):1;
+      if(c.deckId===last.deckId){
+        s+=12*relax;
+        if(last2&&last2.deckId===last.deckId) s+=24*relax;
+      }
+      const t=topicOf(c), tl=topicOf(last);
+      if(t&&tl&&t===tl){
+        s+=10;
+        if(last2&&topicOf(last2)===t) s+=18;
+      }
+    }
+    if(!mix){
+      /* Blockweise: feste Reihenfolge Fach für Fach, innerhalb nach Anlage. */
+      const di=S.decks.findIndex(x=>x.id===c.deckId);
+      s += (di<0?99:di)*0.6 + S.cards.indexOf(c)*1e-4;
+    }
+    // etwas Zufall, damit beim Mischen keine starre Reihenfolge entsteht
+    return {c:c, s:s+(mix?Math.random()*4:0)};
+  });
+  scored.sort((a,b)=>a.s-b.s);
+  session.current=scored[0].c.id;
+  session.shown=false;
+}
+
+function grade(g){
+  if(!session||!session.current) return;
+  const idx=S.cards.findIndex(c=>c.id===session.current);
+  if(idx<0) return;
+  const card=S.cards[idx];
+  undoStack.push({card:JSON.parse(JSON.stringify(card)),logLen:S.log.length,
+                  done:session.done,current:session.current,
+                  recent:session.recent.slice(),retry:Object.assign({},session.retry),
+                  focusCount:session.focusCount,lastSeen:Object.assign({},session.lastSeen)});
+  if(undoStack.length>40) undoStack.shift();
+  const now=new Date();
+  const upd=schedule(card,g,now,schedOpts(card.deckId));
+  S.cards[idx]=Object.assign({},card,upd);
+  S.log.push({d:dayKey(now),t:now.getTime(),c:card.id,g:g,was:card.state});
+  session.done++;
+  if(session.focus&&session.focus.ids[card.deckId]) session.focusCount++;
+  session.lastSeen[card.deckId]=session.done;
+
+  // für die Verschränkung merken, was zuletzt dran war
+  session.recent.unshift(card.id);
+  if(session.recent.length>4) session.recent.pop();
+
+  // Wiedervorlage: nicht erinnert heißt, die Karte kommt noch im selben
+  // Durchgang zurück — und zwar so lange, bis sie zweimal sitzt.
+  const gap=S.settings.retryGap|0;
+  if(gap>0&&g===1) session.retry[card.id]=session.done+gap;
+  else if(g>=3) delete session.retry[card.id];
+  else if(gap>0&&g===2&&(upd.state==='learning'||upd.state==='relearning')){
+    session.retry[card.id]=session.done+gap+2; // "Schwer" kommt etwas später zurück
+  }
+
+  save(); pickNext(); render();
+}
+
+function undo(){
+  const u=undoStack.pop();
+  if(!u){ toast('Nichts zum Zurücknehmen.'); return; }
+  const i=S.cards.findIndex(c=>c.id===u.card.id);
+  if(i>=0) S.cards[i]=u.card;
+  S.log.length=u.logLen;
+  if(session){
+    session.done=u.done; session.current=u.current; session.shown=true;
+    session.recent=u.recent||[]; session.retry=u.retry||{};
+    session.focusCount=u.focusCount||0; session.lastSeen=u.lastSeen||{};
+  }
+  save(); render(); toast('Bewertung zurückgenommen.');
+}
+
+function toast(msg,ms){
+  const old=document.querySelector('.toast'); if(old) old.remove();
+  clearTimeout(toastTimer);
+  const el=document.createElement('div');
+  el.className='toast'; el.textContent=msg;
+  document.body.appendChild(el);
+  toastTimer=setTimeout(()=>el.remove(),ms||2600);
+}
+
+/* ==========================================================================
+   5. Ansichten
+   ========================================================================== */
+function render(){
+  document.documentElement.setAttribute('data-theme',S.settings.theme);
+  const app=document.getElementById('app');
+  let body='';
+  if(view==='review') body=viewReview();
+  else if(view==='browse') body=viewBrowse();
+  else if(view==='stats') body=viewStats();
+  else if(view==='settings') body=viewSettings();
+  else body=viewHome();
+  app.innerHTML=header()+'<main>'+body+'</main>'+(modal?renderModal():'');
+  bind();
+}
+
+function header(){
+  if(view==='review') return '';
+  const tab=(id,label)=>'<button data-nav="'+id+'"'+(view===id?' aria-current="page"':'')+'>'+label+'</button>';
+  return '<header class="top no-print"><div class="top-row">'+
+    '<div class="brand"><div class="mark">◆</div><span class="t">Karteikasten</span></div>'+
+    '<div class="spacer"></div>'+
+    '<nav class="tabs">'+tab('home','Lernen')+tab('browse','Karten')+
+      tab('stats','Statistik')+tab('settings','Mehr')+'</nav>'+
+    '</div></header>';
+}
+
+/* ---------- Startseite ---------- */
+function viewHome(){
+  const all=dueCount(null);
+  const totalNow=all.due+all.fresh;
+  const todayKey=dayKey(new Date());
+  const doneToday=S.log.filter(l=>l.d===todayKey).length;
+
+  let h='<div class="hero">'+
+    '<div><div class="big">'+totalNow+'</div>'+
+    '<div class="sub">'+(totalNow===0
+      ? (S.cards.length? 'Alles erledigt. Nichts steht mehr an.' : 'Noch keine Karten vorhanden.')
+      : (all.due+' zur Wiederholung · '+all.fresh+' neu'))+'</div></div>'+
+    '<div class="spacer"></div>'+
+    (totalNow>0?'<button class="btn primary" data-act="learn-all" style="padding:13px 26px;font-size:16px">Alles lernen</button>':'')+
+    '</div>';
+
+  const plan=pacePlan();
+  if(plan.mode==='auto'&&plan.capped){
+    h+='<div class="focus-banner" style="border-left-color:var(--crit)">'+
+      '<div class="fb-dot" style="background:var(--crit)"></div>'+
+      '<div class="grow"><b>Die Rechnung geht nicht auf</b>'+
+      '<div class="hint" style="margin-top:2px">Um jedes Fach rechtzeitig zu schaffen, wären '+plan.required+
+      ' neue Karten am Tag nötig. Deine Obergrenze steht bei '+plan.ceiling+
+      '. Unter „Mehr" anheben — oder es wird knapp.</div></div></div>';
+  }
+
+  const fs=focusState();
+  if(fs){
+    const pct=Math.round(fs.target*100);
+    const when=fs.days===0?'Prüfung heute':(fs.days===1?'Prüfung morgen':'noch '+fs.days+' Tage');
+    /* Keine Scheingenauigkeit: solange die Steuerung erst anläuft, wird der
+       Anteil beschrieben statt beziffert. Die tatsächlich erreichte Quote
+       steht während des Lernens im Kopf der Sitzung. */
+    const what = fs.strength<0.3
+      ? 'Der Anteil dieses Fachs zieht gerade an und wächst zum Termin hin auf rund '+pct+' %.'
+      : (fs.strength<0.75
+        ? 'Dieses Fach bekommt schon deutlich mehr Karten, zum Termin hin rund '+pct+' %.'
+        : 'Rund '+pct+' % der Karten kommen jetzt aus diesem Fach, der Rest hält die anderen wach.');
+    h+='<div class="focus-banner">'+
+      '<div class="fb-dot" style="background:'+esc(fs.color)+'"></div>'+
+      '<div class="grow"><b>Fokusphase: '+esc(fs.label)+'</b>'+
+      '<div class="hint" style="margin-top:2px">'+when+' · '+what+'</div></div></div>';
+  }
+
+  if(doneToday>0){
+    h+='<div class="hint" style="margin:-12px 0 20px;text-align:center">Heute schon '+doneToday+
+       (doneToday===1?' Karte':' Karten')+' bearbeitet.</div>';
+  }
+
+  h+='<div class="row" style="margin-bottom:11px"><h2 class="sec-title" style="margin:0">Fächer</h2>'+
+     '<div class="spacer"></div><button class="btn sm ghost" data-act="new-deck">+ Stapel</button></div>';
+
+  if(!S.decks.length){
+    h+='<div class="empty card"><h3>Keine Stapel</h3><p>Lege einen an oder importiere eine Kartendatei.</p></div>';
+  }else{
+    const sorted=S.decks.slice().sort((a,b)=>{
+      const x=daysUntil(a.examDate), y=daysUntil(b.examDate);
+      if(x==null&&y==null) return a.created-b.created;
+      if(x==null) return 1; if(y==null) return -1;
+      return x-y||a.created-b.created;
+    });
+    /* Nach Prüfungstermin gruppiert: bei acht Fächern auf drei Termine ist
+       eine flache Liste nicht mehr zu überblicken. */
+    let lastGroup=null;
+    h+='<div class="deck-list">';
+    for(const d of sorted){
+      const gk=d.examDate||'';
+      if(gk!==lastGroup){
+        lastGroup=gk;
+        const gu=daysUntil(d.examDate);
+        const peers=sorted.filter(x=>(x.examDate||'')===gk);
+        const gd=peers.reduce((a,x)=>{const c=dueCount(x.id);return a+c.due+c.fresh;},0);
+        h+='<div class="group-head">'+
+          '<span class="gh-name">'+(d.examDate
+            ? fmtDateDE(d.examDate)+' · '+peers.length+(peers.length===1?' Fach':' Fächer')
+            : 'Ohne Termin')+'</span>'+
+          (d.examDate?'<span class="gh-days'+(gu!=null&&gu<=14?' near':'')+'">'+
+            (gu<0?'vorbei':(gu===0?'heute':(gu===1?'noch 1 Tag':'noch '+gu+' Tage')))+'</span>':'')+
+          '<span class="spacer"></span>'+
+          '<span class="gh-due">'+(gd?gd+' fällig':'nichts offen')+'</span>'+
+        '</div>';
+      }
+      const c=dueCount(d.id);
+      const n=S.cards.filter(x=>x.deckId===d.id).length;
+      const u=daysUntil(d.examDate);
+      let examHtml='';
+      if(d.examDate){
+        const cls=u<0?'':(u<=7?'critical':(u<=21?'urgent':''));
+        examHtml=cls?'<span class="exam-tag '+cls+'">'+
+          (u===0?'Prüfung heute':(u===1?'noch 1 Tag':'noch '+u+' Tage'))+'</span>':'';
+      }
+      const active=c.due+c.fresh>0;
+      h+='<div class="deck"><div class="stripe" style="background:'+esc(d.color)+'"></div>'+
+        '<div class="grow" data-act="edit-deck" data-id="'+d.id+'" style="cursor:pointer">'+
+          '<div class="name">'+esc(d.name)+'</div>'+
+          '<div class="meta">'+examHtml+'<span>'+n+(n===1?' Karte':' Karten')+'</span>'+
+            (plan.mode==='auto'&&plan.need&&plan.need[d.id]
+              ? '<span title="nötiger Tagestakt, um rechtzeitig durchzukommen">'+plan.need[d.id]+' neu/Tag</span>' : '')+
+          '</div>'+
+        '</div>'+
+        '<div class="counts">'+
+          '<span class="count '+(c.fresh?'n':'z')+'" title="neue Karten">'+c.fresh+'</span>'+
+          '<span class="count '+(c.due?'r':'z')+'" title="fällige Wiederholungen">'+c.due+'</span>'+
+        '</div>'+
+        '<button class="btn sm '+(active?'primary':'')+'" data-act="learn-deck" data-id="'+d.id+'"'+
+          (active?'':' disabled')+'>Lernen</button>'+
+      '</div>';
+    }
+    h+='</div>';
+  }
+
+  if(!S.cards.length){
+    h+='<div class="card" style="margin-top:20px;text-align:center">'+
+      '<p class="hint" style="margin:0 0 12px">Schick mir deine Unterlagen — ich schneide daraus '+
+      'die wichtigsten Punkte heraus und gebe dir eine Kartendatei zurück, die du hier importierst.</p>'+
+      '<button class="btn" data-act="import">Kartendatei importieren</button></div>';
+  }
+  return h;
+}
+
+/* ---------- Lernansicht ---------- */
+function viewReview(){
+  if(!session) { view='home'; return viewHome(); }
+  const card=session.current?S.cards.find(c=>c.id===session.current):null;
+  const deck=card?deckById(card.deckId):null;
+
+  if(!card){
+    const mins=Math.round((Date.now()-session.startedAt)/MIN);
+    const q=queueFor(session.deckId);
+    const rest=q.learning.length+q.review.length+q.fresh.length;
+    return '<div class="review-wrap done-screen">'+
+      '<div class="tick">✓</div>'+
+      '<h2 style="font-size:21px;margin-bottom:8px">Durchgang geschafft</h2>'+
+      '<p class="hint" style="margin-bottom:24px">'+session.done+
+        (session.done===1?' Karte':' Karten')+' in '+(mins<1?'unter einer Minute':mins+' Min.')+'.'+
+        (rest>0?'<br>Es warten noch '+rest+' Karten, die vorhin noch nicht dran waren.':'')+'</p>'+
+      '<div class="row" style="justify-content:center;gap:9px;flex-wrap:wrap">'+
+        (rest>0?'<button class="btn primary" data-act="learn-deck" data-id="'+(session.deckId||'')+'">Weiter lernen</button>':'')+
+        '<button class="btn" data-act="end-session">Zur Übersicht</button>'+
+      '</div></div>';
+  }
+
+  const q=queueFor(session.deckId);
+  const remaining=q.learning.length+q.review.length+q.fresh.length;
+  const pct=session.planned?Math.min(100,Math.round(session.done/(session.done+remaining||1)*100)):0;
+  const now=new Date();
+  const opts=schedOpts(card.deckId);
+
+  let h='<div class="review-wrap">'+
+    '<div class="rev-head">'+
+      '<button class="btn sm ghost" data-act="end-session" title="Beenden (Esc)">‹ Ende</button>'+
+      '<div class="spacer"></div>'+
+      '<div class="rev-counts">'+
+        '<span style="color:var(--warn)">'+q.learning.length+' lernen</span>'+
+        '<span style="color:var(--good)">'+q.review.length+' wdh.</span>'+
+        '<span style="color:var(--ord-4)">'+q.fresh.length+' neu</span>'+
+      '</div>'+
+      '<button class="btn sm ghost" data-act="undo" title="Zurücknehmen (Z)"'+
+        (undoStack.length?'':' disabled')+'>↺</button>'+
+    '</div>'+
+    '<div class="progress"><i style="width:'+pct+'%"></i></div>';
+
+  if(session.focus){
+    const soFar=session.done?Math.round(session.focusCount/session.done*100):0;
+    h+='<div class="hint" style="text-align:center;margin:-8px 0 16px">'+
+       'Fokusphase '+esc(session.focus.label)+' · Ziel '+Math.round(session.focus.target*100)+' %'+
+       (session.done?', bisher '+soFar+' %':'')+'</div>';
+  }
+
+  /* Herkunft steht immer auf der Karte — sonst merkt man beim Mischen nicht,
+     aus welchem Fach die Frage gerade kommt. */
+  const topic=topicOf(card);
+  let pills='<span class="pill"><span class="dot" style="background:'+esc(deck?deck.color:'#888')+'"></span>'+
+            esc(deck?deck.name:'Ohne Stapel')+'</span>';
+  if(topic) pills+='<span class="pill">'+esc(card.tags[0])+'</span>';
+  if(card.type==='concept')
+    pills+='<span class="pill" style="background:rgba(217,89,38,.16);color:#d95926">Zusammenhang</span>';
+  if(session.retry[card.id]!=null)
+    pills+='<span class="pill" style="background:rgba(208,59,59,.16);color:var(--crit)">Wiedervorlage</span>';
+
+  h+='<div class="qcard"><div class="pillrow">'+pills+'</div><div class="qtext">'+fmt(card.front)+'</div>';
+
+  if(session.shown){
+    h+='<div class="divider"></div><div class="atext">'+fmt(card.back)+'</div>';
+    if(card.note) h+='<div class="anote">'+fmt(card.note)+'</div>';
+    // das erste Schlagwort steht schon oben als Thema — hier nur die weiteren
+    const extra=(card.tags||[]).slice(1);
+    if(extra.length){
+      h+='<div class="tagrow">'+extra.map(t=>'<span class="pill">'+esc(t)+'</span>').join('')+'</div>';
+    }
+  }else if(card.type==='concept'){
+    h+='<div class="hint" style="margin-top:18px">Erkläre es dir laut in eigenen Worten, bevor du aufdeckst.</div>';
+  }
+  h+='</div>';
+
+  if(!session.shown){
+    h+='<button class="btn primary wide" data-act="show" style="margin-top:18px;padding:15px;font-size:16px">'+
+       'Antwort zeigen <span class="kbd" style="margin-left:4px">Leer</span></button>';
+  }else{
+    const labels={1:'Nochmal',2:'Schwer',3:'Gut',4:'Leicht'};
+    h+='<div class="grades">';
+    for(const g of [1,2,3,4]){
+      const r=schedule(card,g,now,opts);
+      const delta=new Date(r.due).getTime()-now.getTime();
+      h+='<button class="grade" data-act="grade" data-g="'+g+'">'+
+         '<span class="lbl">'+labels[g]+'</span>'+
+         '<span class="iv">'+fmtDelta(delta)+'</span>'+
+         '<span class="kbd">'+g+'</span></button>';
+    }
+    h+='</div>';
+  }
+
+  if(card.state==='review'&&card.stability){
+    const el=card.lastReview?(now-new Date(card.lastReview))/DAY:0;
+    const r=Math.round(retrievability(el,card.stability)*100);
+    h+='<div class="hint" style="text-align:center;margin-top:14px">'+
+       'Erinnerungswahrscheinlichkeit vor dem Aufdecken: '+r+' % · '+
+       'Stabilität '+card.stability.toFixed(1).replace('.',',')+' Tage'+
+       (card.lapses?' · '+card.lapses+'× vergessen':'')+'</div>';
+  }
+  h+='<div class="hint no-print keyhelp" style="text-align:center;margin-top:20px;opacity:.7">'+
+     'Tasten: <span class="kbd">Leer</span> aufdecken · <span class="kbd">1</span>–<span class="kbd">4</span> bewerten · '+
+     '<span class="kbd">Z</span> zurück · <span class="kbd">Esc</span> Ende</div>';
+  return h+'</div>';
+}
+
+/* ---------- Kartenverwaltung ---------- */
+let browseFilter={deck:'',q:'',state:''};
+function viewBrowse(){
+  let list=S.cards.slice();
+  if(browseFilter.deck) list=list.filter(c=>c.deckId===browseFilter.deck);
+  if(browseFilter.state) list=list.filter(c=>c.state===browseFilter.state);
+  if(browseFilter.q){
+    const q=browseFilter.q.toLowerCase();
+    list=list.filter(c=>(c.front+' '+c.back+' '+(c.note||'')+' '+(c.tags||[]).join(' ')).toLowerCase().includes(q));
+  }
+  list.sort((a,b)=>(a.due?new Date(a.due):0)-(b.due?new Date(b.due):0)||b.created-a.created);
+
+  let h='<div class="row" style="margin-bottom:16px;flex-wrap:wrap;gap:8px">'+
+    '<h2 style="font-size:20px;margin:0">Karten</h2><span class="pill">'+list.length+'</span>'+
+    '<div class="spacer"></div>'+
+    '<button class="btn sm" data-act="import">Importieren</button>'+
+    '<button class="btn sm primary" data-act="new-card">+ Karte</button></div>';
+
+  h+='<div class="row" style="margin-bottom:14px;gap:8px;flex-wrap:wrap">'+
+    '<input type="text" id="f-q" placeholder="Suchen …" value="'+esc(browseFilter.q)+'" style="flex:2;min-width:150px">'+
+    '<select id="f-deck" style="flex:1;min-width:130px"><option value="">Alle Stapel</option>'+
+      S.decks.map(d=>'<option value="'+d.id+'"'+(browseFilter.deck===d.id?' selected':'')+'>'+esc(d.name)+'</option>').join('')+
+    '</select>'+
+    '<select id="f-state" style="flex:1;min-width:120px">'+
+      [['','Alle Zustände'],['new','Neu'],['learning','Lernphase'],['review','Wiederholung'],['relearning','Erneut lernen']]
+        .map(o=>'<option value="'+o[0]+'"'+(browseFilter.state===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+
+    '</select></div>';
+
+  if(!list.length){
+    h+='<div class="empty card"><h3>Keine Karten gefunden</h3>'+
+       '<p>Lege eine an, oder importiere eine Kartendatei, die ich dir geschickt habe.</p></div>';
+    return h;
+  }
+
+  h+='<div class="card" style="padding:14px 6px"><table class="tbl"><thead><tr>'+
+     '<th style="width:44%">Frage</th><th class="hide-s">Stapel</th><th>Zustand</th>'+
+     '<th class="hide-s">Fällig</th></tr></thead><tbody>';
+  for(const c of list.slice(0,400)){
+    const d=deckById(c.deckId);
+    const stName={new:'Neu',learning:'Lernphase',review:'Wiederholung',relearning:'Erneut'}[c.state]||c.state;
+    let due='—';
+    if(c.state==='new') due='neu';
+    else if(c.due){
+      const dd=Math.ceil((startOfDay(c.due)-startOfDay(new Date()))/DAY);
+      due = dd<0?'überfällig':(dd===0?'heute':(dd===1?'morgen':'in '+dd+' T.'));
+    }
+    h+='<tr class="clickable" data-act="edit-card" data-id="'+c.id+'" style="cursor:pointer">'+
+      '<td><div class="truncate" style="max-width:100%;font-weight:520">'+esc(c.front)+'</div>'+
+        (c.type==='concept'?'<span class="pill" style="margin-top:4px;background:rgba(217,89,38,.16);color:#d95926">Zusammenhang</span>':'')+'</td>'+
+      '<td class="hide-s"><span class="row" style="gap:6px"><span class="dot" style="background:'+
+        esc(d?d.color:'#888')+'"></span><span class="truncate" style="max-width:110px">'+esc(d?d.name:'—')+'</span></span></td>'+
+      '<td><span class="state-badge st-'+c.state+'">'+stName+'</span></td>'+
+      '<td class="hide-s" style="color:var(--muted);font-variant-numeric:tabular-nums">'+due+'</td>'+
+    '</tr>';
+  }
+  h+='</tbody></table></div>';
+  if(list.length>400) h+='<p class="hint" style="text-align:center;margin-top:12px">Nur die ersten 400 werden angezeigt.</p>';
+  return h;
+}
+
+/* ---------- Statistik ---------- */
+function viewStats(){
+  const now=new Date(), todayKey=dayKey(now);
+  const doneToday=S.log.filter(l=>l.d===todayKey).length;
+  const c30=S.log.filter(l=>l.t>now.getTime()-30*DAY&&l.was==='review');
+  const hit=c30.filter(l=>l.g>1).length;
+  const rate=c30.length?Math.round(hit/c30.length*100):null;
+  const mature=S.cards.filter(c=>c.state==='review'&&c.stability>=21).length;
+  const all=dueCount(null);
+
+  let h='<h2 style="font-size:20px;margin-bottom:16px">Statistik</h2>';
+  h+='<div class="kpis">'+
+    '<div class="kpi"><div class="v">'+(all.due+all.fresh)+'</div><div class="k">steht heute an</div></div>'+
+    '<div class="kpi"><div class="v">'+doneToday+'</div><div class="k">heute bearbeitet</div></div>'+
+    '<div class="kpi"><div class="v">'+(rate==null?'—':rate+' %')+'</div><div class="k">Trefferquote 30 Tage</div></div>'+
+    '<div class="kpi"><div class="v">'+mature+'</div><div class="k">Karten sitzen fest</div></div>'+
+    '</div>';
+
+  /* Prognose: eine Serie, daher keine Legende — der Titel benennt sie. */
+  const days=30, buckets=new Array(days).fill(0);
+  let overdue=0;
+  for(const c of S.cards){
+    if(c.state==='new'||!c.due) continue;
+    const off=Math.ceil((startOfDay(c.due)-startOfDay(now))/DAY);
+    if(off<0) overdue++;
+    else if(off<days) buckets[off]++;
+  }
+  const wd=['So','Mo','Di','Mi','Do','Fr','Sa'];
+  /* Obergrenze immer geradzahlig, damit die 50-%-Hilfslinie eine ganze Zahl trägt. */
+  const roundUpEven=n=>{
+    n=Math.max(2,n);
+    const step=n<=10?2:(n<=50?10:(n<=200?20:50));
+    return Math.ceil(n/step)*step;
+  };
+  const niceMax=roundUpEven(Math.max(...buckets));
+
+  h+='<div class="chart"><h3>Fällige Karten, kommende 30 Tage</h3>'+
+     '<div class="csub">Wie viel Arbeit auf dich zukommt, wenn du am Ball bleibst'+
+     (overdue?' · '+overdue+' Karten sind überfällig':'')+'</div>'+
+     '<div class="bars">';
+  for(const y of [0.5,1]){
+    h+='<div class="gridline" style="bottom:'+(y*100)+'%"><span>'+(niceMax*y)+'</span></div>';
+  }
+  for(let i=0;i<days;i++){
+    const v=buckets[i];
+    const dt=new Date(startOfDay(now).getTime()+i*DAY);
+    h+='<div class="bar'+(v?' nz':'')+'" tabindex="0">'+
+       '<div class="tip"><b>'+v+'</b> '+(v===1?'Karte':'Karten')+' · '+wd[dt.getDay()]+' '+fmtDateDE(dt)+'</div>'+
+       '<i style="height:'+(v/niceMax*100).toFixed(2)+'%"></i></div>';
+  }
+  h+='</div><div class="xaxis">';
+  for(let i=0;i<days;i++){
+    const dt=new Date(startOfDay(now).getTime()+i*DAY);
+    h+='<div>'+((i%5===0||i===0)?dt.getDate()+'.'+(dt.getMonth()+1)+'.':'')+'</div>';
+  }
+  h+='</div></div>';
+
+  /* Reifegrad: geordnete Abstufung, daher eine Farbfamilie von blass nach kräftig. */
+  const st={neu:0,lernen:0,jung:0,reif:0};
+  for(const c of S.cards){
+    if(c.state==='new') st.neu++;
+    else if(c.state==='learning'||c.state==='relearning') st.lernen++;
+    else if(c.stability&&c.stability>=21) st.reif++;
+    else st.jung++;
+  }
+  const tot=S.cards.length||1;
+  const segs=[['neu','Neu','var(--ord-1)'],['lernen','In der Lernphase','var(--ord-2)'],
+              ['jung','Frisch gelernt','var(--ord-3)'],['reif','Sitzt fest','var(--ord-4)']];
+  h+='<div class="chart"><h3>Reifegrad deiner Karten</h3>'+
+     '<div class="csub">„Sitzt fest" heißt: Wiederholungsabstand über 21 Tage</div>'+
+     '<div class="stackbar">';
+  for(const s of segs){
+    if(!st[s[0]]) continue;
+    h+='<div style="background:'+s[2]+';flex:'+st[s[0]]+'" title="'+s[1]+': '+st[s[0]]+'"></div>';
+  }
+  if(S.cards.length===0) h+='<div style="background:var(--surface-3);flex:1"></div>';
+  h+='</div><div class="legend">';
+  for(const s of segs){
+    h+='<span class="li"><span class="dot" style="background:'+s[2]+'"></span>'+s[1]+
+       ' <b>'+st[s[0]]+'</b> <span style="color:var(--muted)">('+Math.round(st[s[0]]/tot*100)+' %)</span></span>';
+  }
+  h+='</div></div>';
+
+  /* Aktivität der letzten 14 Tage */
+  const act=[];
+  for(let i=13;i>=0;i--){
+    const dt=new Date(startOfDay(now).getTime()-i*DAY);
+    act.push({dt:dt,n:S.log.filter(l=>l.d===dayKey(dt)).length});
+  }
+  const anice=roundUpEven(Math.max(...act.map(a=>a.n)));
+  h+='<div class="chart"><h3>Bearbeitete Karten, letzte 14 Tage</h3>'+
+     '<div class="csub">Regelmäßigkeit schlägt Länge — lieber täglich kurz</div>'+
+     '<div class="bars">';
+  for(const y of [0.5,1]) h+='<div class="gridline" style="bottom:'+(y*100)+'%"><span>'+(anice*y)+'</span></div>';
+  for(const a of act){
+    h+='<div class="bar'+(a.n?' nz':'')+'" tabindex="0"><div class="tip"><b>'+a.n+'</b> '+(a.n===1?'Karte':'Karten')+
+       ' · '+wd[a.dt.getDay()]+' '+fmtDateDE(a.dt)+'</div>'+
+       (a.n>0?'<span class="val">'+a.n+'</span>':'')+
+       '<i style="height:'+(a.n/anice*100).toFixed(2)+'%"></i></div>';
+  }
+  h+='</div><div class="xaxis">';
+  for(const a of act) h+='<div>'+a.dt.getDate()+'.</div>';
+  h+='</div></div>';
+
+  h+='<p class="hint" style="text-align:center;margin-top:18px">Alle Zahlen liegen nur auf diesem Gerät. '+
+     'Unter „Mehr" kannst du sie sichern.</p>';
+  return h;
+}
+
+/* ---------- Einstellungen ---------- */
+function viewSettings(){
+  const s=S.settings;
+  let h='<h2 style="font-size:20px;margin-bottom:16px">Mehr</h2>';
+
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Lernverhalten</h3>'+
+    '<label class="fld"><span>Zielsicherheit beim Wiedersehen</span>'+
+      '<input type="range" id="s-ret" min="0.8" max="0.97" step="0.01" value="'+s.desiredRetention+'" style="width:100%;padding:0">'+
+      '<div class="hint" style="margin-top:6px" id="s-ret-lbl">'+Math.round(s.desiredRetention*100)+
+      ' % — je höher, desto häufiger die Wiederholungen und desto mehr Arbeit pro Tag.</div></label>'+
+    '<label class="fld"><span>'+(s.newMode==='auto'?'Obergrenze neue Karten pro Tag':'Neue Karten pro Tag')+'</span>'+
+      '<input type="number" id="s-new" min="0" max="500" value="'+s.newPerDay+'">'+
+      '<div class="hint" style="margin-top:5px">'+(s.newMode==='auto'
+        ? 'Nur die Notbremse. Wie viele Karten tatsächlich kommen, rechnet die App unten aus.'
+        : 'Bremse gegen Überlastung. Jede neue Karte erzeugt auf Monate hinaus Wiederholungen.')+
+      '</div></label>'+
+    '<label class="fld"><span>Längster Abstand (Tage)</span>'+
+      '<input type="number" id="s-max" min="1" max="3650" value="'+s.maximumInterval+'"></label>'+
+    '<label class="fld" style="margin-bottom:0"><span>Nach einem Fehler wieder dran nach … Karten</span>'+
+      '<input type="number" id="s-gap" min="0" max="30" value="'+s.retryGap+'">'+
+      '<div class="hint" style="margin-top:5px">Was du nicht wusstest, kommt noch im selben Durchgang zurück — '+
+      'so oft, bis es sitzt. 0 schaltet das ab und überlässt alles der Uhr.</div></label>'+
+    '</div>';
+
+  const plan=pacePlan();
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Taktung neuer Karten</h3>'+
+    '<div class="row" style="gap:8px;margin-bottom:12px">'+
+      '<button class="btn sm'+(s.newMode==='auto'?' primary':'')+'" data-act="newmode" data-v="auto">Automatisch</button>'+
+      '<button class="btn sm'+(s.newMode!=='auto'?' primary':'')+'" data-act="newmode" data-v="fixed">Feste Zahl</button>'+
+    '</div>';
+  if(s.newMode==='auto'){
+    const rows=S.decks.map(d=>{
+      const rest=S.cards.filter(c=>c.deckId===d.id&&c.state==='new').length;
+      if(!rest) return '';
+      const u=daysUntil(d.examDate);
+      return '<tr><td style="padding:4px 0"><span class="dot" style="display:inline-block;background:'+esc(d.color)+
+        ';margin-right:7px"></span>'+esc(d.name)+'</td>'+
+        '<td style="text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">'+rest+' offen</td>'+
+        '<td style="text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">'+
+          (u==null?'ohne Termin':(u<0?'Termin vorbei':u+' T.'))+'</td>'+
+        '<td style="text-align:right;font-weight:640;font-variant-numeric:tabular-nums">'+
+          (plan.need[d.id]||0)+'/Tag</td></tr>';
+    }).join('');
+    h+= rows
+      ? '<table style="width:100%;font-size:13.5px;border-collapse:collapse">'+rows+'</table>'+
+        '<p class="hint" style="margin:12px 0 0">Macht zusammen <b>'+plan.required+' neue Karten am Tag</b>, '+
+        'um jedes Fach rechtzeitig durchzubekommen.'+
+        (plan.capped?' Deine Obergrenze liegt bei '+plan.ceiling+' — das reicht rechnerisch nicht. '+
+          'Setz die Obergrenze höher oder plane ein, dass ein Fach nicht ganz fertig wird.':'')+'</p>'
+      : '<p class="hint" style="margin:0">Sobald Karten da sind, steht hier der nötige Tagestakt je Fach.</p>';
+  }else{
+    h+='<p class="hint" style="margin:0">Feste Zahl: das Budget geht an das Fach mit dem nächsten Termin. '+
+       'Bei mehreren Prüfungen fangen die späteren Fächer entsprechend spät an.</p>';
+  }
+  h+='</div>';
+
+  const fsp=focusState();
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Fokusphase vor der Prüfung</h3>'+
+    '<label class="fld"><span>Fenster beginnt … Tage vorher</span>'+
+      '<input type="number" id="s-fdays" min="0" max="90" value="'+s.focusDays+'">'+
+      '<div class="hint" style="margin-top:5px">0 schaltet die Fokusphase ab.</div></label>'+
+    '<label class="fld" style="margin-bottom:0"><span>Anteil am Prüfungstag</span>'+
+      '<input type="range" id="s-fpeak" min="0.4" max="1" step="0.05" value="'+s.focusPeak+'" style="width:100%;padding:0">'+
+      '<div class="hint" style="margin-top:6px" id="s-fpeak-lbl">'+Math.round(s.focusPeak*100)+
+      ' % Prüfungsfach, '+Math.round((1-s.focusPeak)*100)+' % Erhaltungsdosis für die übrigen Fächer.</div></label>'+
+    '<p class="hint" style="margin:13px 0 0">Der Anteil steigt gleitend an: am Anfang des Fensters merkst du kaum '+
+    'einen Unterschied, zum Termin hin wird es deutlich. Innerhalb des Prüfungsfachs wird weiter quer durch die '+
+    'Themen gefragt — nur die Fächer untereinander mischen sich weniger.'+
+    (fsp?'<br><br><b>Gerade aktiv:</b> '+esc(fsp.label)+', noch '+fsp.days+' Tage, Zielanteil '+
+         Math.round(fsp.target*100)+' %.':'')+'</p>'+
+    '</div>';
+
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Themen mischen</h3>'+
+    '<div class="row" style="gap:8px;margin-bottom:11px">'+
+      '<button class="btn sm'+(s.interleave!==false?' primary':'')+'" data-act="interleave" data-v="1">Gemischt</button>'+
+      '<button class="btn sm'+(s.interleave===false?' primary':'')+'" data-act="interleave" data-v="0">Blockweise</button>'+
+    '</div>'+
+    '<p class="hint" style="margin:0">Gemischt heißt: nie zweimal hintereinander dasselbe Fach oder Thema, '+
+    'solange eine Alternative fällig ist. Das fühlt sich anstrengender an als Kapitel für Kapitel — '+
+    'und schneidet in Untersuchungen regelmäßig besser ab, weil du dabei auch lernst, '+
+    '<i>welche</i> Methode auf welche Frage gehört. Genau das verlangt eine Prüfung von dir.</p>'+
+    '</div>';
+
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Daten</h3>'+
+    '<div class="row" style="flex-wrap:wrap;gap:8px">'+
+      '<button class="btn" data-act="export">Sicherung speichern</button>'+
+      '<button class="btn" data-act="import">Importieren</button>'+
+      '<button class="btn" data-act="paste-import">Text einfügen</button>'+
+    '</div>'+
+    '<p class="hint" style="margin:12px 0 0">Die Sicherung enthält Stapel, Karten und deinen kompletten Lernstand. '+
+    'Sinnvoll etwa einmal pro Woche — und immer, bevor du den Browserverlauf löschst.</p>'+
+    '</div>';
+
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Darstellung</h3>'+
+    '<div class="row" style="gap:8px">'+
+      '<button class="btn sm'+(s.theme==='dark'?' primary':'')+'" data-act="theme" data-v="dark">Dunkel</button>'+
+      '<button class="btn sm'+(s.theme==='light'?' primary':'')+'" data-act="theme" data-v="light">Hell</button>'+
+    '</div></div>';
+
+  const totalReviews=S.log.length;
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Über diese App</h3>'+
+    '<p class="hint" style="margin:0 0 10px"><b>Verteiltes Lernen</b> nach dem Verfahren <b>FSRS 4.5</b>, '+
+    'das auch Anki verwendet: jede Karte bekommt eine eigene Vergessenskurve. Was sitzt, rückt in immer '+
+    'größere Abstände; was du nicht wusstest, kommt noch im selben Durchgang zurück und fängt wieder klein an.</p>'+
+    '<p class="hint" style="margin:0 0 10px"><b>Verschränktes Üben</b>: unter den fälligen Karten wird so '+
+    'ausgewählt, dass Fach und Thema möglichst wechseln, gewichtet nach Prüfungsnähe.</p>'+
+    '<p class="hint" style="margin:0 0 10px"><b>Fokusphase</b>: vor einem Termin verschiebt sich die Mischung '+
+    'gleitend zugunsten des betroffenen Fachs, zuerst bei den Karten, die erkennbar noch wackeln. '+
+    'Die übrigen Fächer behalten eine Erhaltungsdosis, damit dort kein Berg entsteht.</p>'+
+    '<p class="hint" style="margin:0">'+S.cards.length+' Karten · '+S.decks.length+' Stapel · '+
+    totalReviews+' Bewertungen insgesamt.</p></div>';
+
+  h+='<div class="card"><h3 class="sec-title">Gefahrenzone</h3>'+
+    '<button class="btn danger" data-act="reset">Alles löschen und neu anfangen</button></div>';
+  return h;
+}
+
+/* ==========================================================================
+   6. Dialoge
+   ========================================================================== */
+function renderModal(){
+  let inner='';
+  if(modal.type==='card') inner=modalCard();
+  else if(modal.type==='deck') inner=modalDeck();
+  else if(modal.type==='paste') inner=modalPaste();
+  else if(modal.type==='confirm') inner=modalConfirm();
+  return '<div class="modal-bg" data-act="modal-bg"><div class="modal">'+inner+'</div></div>';
+}
+function modalCard(){
+  const c=modal.card;
+  const isNew=!c.id;
+  return '<h2>'+(isNew?'Neue Karte':'Karte bearbeiten')+'</h2>'+
+    '<label class="fld"><span>Stapel</span><select id="m-deck">'+
+      S.decks.map(d=>'<option value="'+d.id+'"'+(c.deckId===d.id?' selected':'')+'>'+esc(d.name)+'</option>').join('')+
+    '</select></label>'+
+    '<label class="fld"><span>Art</span><select id="m-type">'+
+      '<option value="basic"'+(c.type==='basic'?' selected':'')+'>Frage → Antwort</option>'+
+      '<option value="concept"'+(c.type==='concept'?' selected':'')+'>Zusammenhangsfrage</option>'+
+    '</select></label>'+
+    '<label class="fld"><span>Vorderseite (Frage)</span><textarea id="m-front">'+esc(c.front)+'</textarea></label>'+
+    '<label class="fld"><span>Rückseite (Antwort)</span><textarea id="m-back">'+esc(c.back)+'</textarea></label>'+
+    '<label class="fld"><span>Erläuterung (freiwillig)</span><textarea id="m-note" style="min-height:64px">'+esc(c.note||'')+'</textarea>'+
+      '<div class="hint" style="margin-top:5px">Erscheint kleiner unter der Antwort. Gut für Begründung, Eselsbrücke oder Quelle.</div></label>'+
+    '<label class="fld"><span>Schlagwörter, mit Komma getrennt</span>'+
+      '<input type="text" id="m-tags" value="'+esc((c.tags||[]).join(', '))+'"></label>'+
+    '<div class="modal-actions">'+
+      (isNew?'':'<button class="btn danger" data-act="delete-card" data-id="'+c.id+'">Löschen</button>'+
+              '<button class="btn" data-act="reset-card" data-id="'+c.id+'">Fortschritt zurücksetzen</button>')+
+      '<div class="spacer"></div>'+
+      '<button class="btn ghost" data-act="close-modal">Abbrechen</button>'+
+      '<button class="btn primary" data-act="save-card">Sichern</button>'+
+    '</div>';
+}
+function modalDeck(){
+  const d=modal.deck, isNew=!d.id;
+  const n=isNew?0:S.cards.filter(c=>c.deckId===d.id).length;
+  return '<h2>'+(isNew?'Neuer Stapel':'Stapel bearbeiten')+'</h2>'+
+    '<label class="fld"><span>Name</span><input type="text" id="m-name" value="'+esc(d.name)+'" placeholder="z. B. Steuerrecht"></label>'+
+    '<label class="fld"><span>Prüfungstermin (freiwillig)</span><input type="date" id="m-exam" value="'+esc(d.examDate||'')+'">'+
+      '<div class="hint" style="margin-top:5px">Mit Termin sorgt die App dafür, dass jede Karte davor noch einmal drankommt — '+
+      'und drillt in den letzten Tagen täglich.</div></label>'+
+    '<label class="fld"><span>Farbe</span><div class="row" style="gap:7px;flex-wrap:wrap">'+
+      DECK_COLORS.map(col=>'<button type="button" data-act="pick-color" data-v="'+col+'" style="width:32px;height:32px;'+
+        'border-radius:9px;background:'+col+';border:2px solid '+(d.color===col?'var(--ink)':'transparent')+'"></button>').join('')+
+    '</div></label>'+
+    '<div class="modal-actions">'+
+      (isNew?'':'<button class="btn danger" data-act="delete-deck" data-id="'+d.id+'">Stapel löschen'+(n?' ('+n+' Karten)':'')+'</button>')+
+      '<div class="spacer"></div>'+
+      '<button class="btn ghost" data-act="close-modal">Abbrechen</button>'+
+      '<button class="btn primary" data-act="save-deck">Sichern</button>'+
+    '</div>';
+}
+function modalPaste(){
+  return '<h2>Karten aus Text anlegen</h2>'+
+    '<p class="hint" style="margin:0 0 14px">Eine Karte pro Zeile, Frage und Antwort durch einen senkrechten Strich getrennt:<br>'+
+    '<code style="background:var(--surface-3);padding:2px 6px;border-radius:4px;display:inline-block;margin-top:6px">'+
+    'Was ist X? | Die Antwort auf X</code></p>'+
+    '<label class="fld"><span>Stapel</span><select id="p-deck">'+
+      S.decks.map(d=>'<option value="'+d.id+'">'+esc(d.name)+'</option>').join('')+
+    '</select></label>'+
+    '<label class="fld"><span>Text</span><textarea id="p-text" style="min-height:180px" placeholder="Frage | Antwort"></textarea></label>'+
+    '<div class="modal-actions"><button class="btn ghost" data-act="close-modal">Abbrechen</button>'+
+      '<button class="btn primary" data-act="do-paste">Anlegen</button></div>';
+}
+function modalConfirm(){
+  return '<h2>'+esc(modal.title)+'</h2><p class="hint" style="margin:0 0 4px">'+esc(modal.text)+'</p>'+
+    '<div class="modal-actions"><button class="btn ghost" data-act="close-modal">Abbrechen</button>'+
+      '<button class="btn danger" data-act="confirm-yes">'+esc(modal.ok||'Ja, löschen')+'</button></div>';
+}
+
+/* ==========================================================================
+   7. Import / Export
+   ========================================================================== */
+function doExport(){
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='karteikasten-sicherung-'+dayKey(new Date())+'.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+  toast('Sicherung gespeichert.');
+}
+
+function doImportFile(){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=()=>{
+    const f=inp.files&&inp.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{
+      try{ importData(JSON.parse(rd.result)); }
+      catch(e){ toast('Datei konnte nicht gelesen werden: '+e.message,5000); }
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+
+/* Akzeptiert drei Formen:
+   1. eine vollständige Sicherung dieser App
+   2. { deck:{…}, cards:[…] }        — ein Stapel
+   3. { decks:[ {deck, cards}, … ] } — mehrere Stapel auf einmal          */
+function importData(data){
+  if(!data||typeof data!=='object') throw new Error('unbekanntes Format');
+
+  if(data.v&&Array.isArray(data.decks)&&Array.isArray(data.cards)&&data.settings){
+    modal={type:'confirm',title:'Sicherung einspielen?',
+      text:'Das ersetzt deinen jetzigen Stand vollständig: '+data.cards.length+' Karten in '+
+           data.decks.length+' Stapeln, samt Lernfortschritt.',
+      ok:'Ja, ersetzen', fn:()=>{ S=data; S.log=S.log||[]; save(); view='home'; toast('Sicherung eingespielt.'); }};
+    render(); return;
+  }
+
+  const packs = Array.isArray(data.decks) ? data.decks
+              : (data.deck||data.cards) ? [data] : null;
+  if(!packs) throw new Error('weder Sicherung noch Kartenstapel');
+
+  let added=0, skipped=0, newDecks=0;
+  for(const p of packs){
+    const meta=p.deck||{name:'Importiert',examDate:'',color:DECK_COLORS[0]};
+    let deck=S.decks.find(d=>d.name.trim().toLowerCase()===String(meta.name||'').trim().toLowerCase());
+    if(!deck){
+      deck={id:uid(),name:meta.name||'Importiert',examDate:meta.examDate||'',
+            color:meta.color||DECK_COLORS[S.decks.length%DECK_COLORS.length],created:Date.now()};
+      S.decks.push(deck); newDecks++;
+    }else if(meta.examDate&&!deck.examDate){ deck.examDate=meta.examDate; }
+
+    const existing=new Set(S.cards.filter(c=>c.deckId===deck.id)
+      .map(c=>String(c.front).trim().toLowerCase()));
+    for(const raw of (p.cards||[])){
+      const front=String(raw.front||'').trim();
+      if(!front||!String(raw.back||'').trim()){ skipped++; continue; }
+      if(existing.has(front.toLowerCase())){ skipped++; continue; }
+      existing.add(front.toLowerCase());
+      S.cards.push(Object.assign({
+        id:uid(),deckId:deck.id,
+        type:raw.type==='concept'?'concept':'basic',
+        front:front, back:String(raw.back).trim(),
+        note:raw.note?String(raw.note).trim():'',
+        tags:Array.isArray(raw.tags)?raw.tags:[],
+        source:raw.source||'', created:Date.now()
+      },newCardState()));
+      added++;
+    }
+  }
+  save(); view='home'; render();
+  toast(added+' Karten übernommen'+(newDecks?', '+newDecks+' Stapel neu angelegt':'')+
+        (skipped?' · '+skipped+' übersprungen (Dublette oder unvollständig)':''),5000);
+}
+
+/* ==========================================================================
+   8. Ereignisse
+   ========================================================================== */
+function closeModal(){ modal=null; render(); }
+
+function bind(){
+  document.querySelectorAll('[data-nav]').forEach(el=>{
+    el.onclick=()=>{ view=el.dataset.nav; session=null; render(); };
+  });
+
+  const q=document.getElementById('f-q');
+  if(q){
+    q.oninput=()=>{ browseFilter.q=q.value; const p=q.selectionStart; render();
+      const n=document.getElementById('f-q'); if(n){n.focus();n.setSelectionRange(p,p);} };
+  }
+  const fd=document.getElementById('f-deck');
+  if(fd) fd.onchange=()=>{ browseFilter.deck=fd.value; render(); };
+  const fs=document.getElementById('f-state');
+  if(fs) fs.onchange=()=>{ browseFilter.state=fs.value; render(); };
+
+  const ret=document.getElementById('s-ret');
+  if(ret){
+    ret.oninput=()=>{
+      document.getElementById('s-ret-lbl').textContent=Math.round(ret.value*100)+
+        ' % — je höher, desto häufiger die Wiederholungen und desto mehr Arbeit pro Tag.';
+    };
+    ret.onchange=()=>{ S.settings.desiredRetention=parseFloat(ret.value); save(); toast('Gespeichert.'); };
+  }
+  const sn=document.getElementById('s-new');
+  if(sn) sn.onchange=()=>{ S.settings.newPerDay=Math.max(0,parseInt(sn.value)||0); save(); toast('Gespeichert.'); };
+  const sm=document.getElementById('s-max');
+  if(sm) sm.onchange=()=>{ S.settings.maximumInterval=Math.max(1,parseInt(sm.value)||1095); save(); toast('Gespeichert.'); };
+  const sg=document.getElementById('s-gap');
+  if(sg) sg.onchange=()=>{ S.settings.retryGap=Math.min(30,Math.max(0,parseInt(sg.value)||0)); save(); toast('Gespeichert.'); };
+  const fdz=document.getElementById('s-fdays');
+  if(fdz) fdz.onchange=()=>{ S.settings.focusDays=Math.min(90,Math.max(0,parseInt(fdz.value)||0)); save(); render(); };
+  const fpk=document.getElementById('s-fpeak');
+  if(fpk){
+    fpk.oninput=()=>{ document.getElementById('s-fpeak-lbl').textContent=
+      Math.round(fpk.value*100)+' % Prüfungsfach, '+Math.round((1-fpk.value)*100)+
+      ' % Erhaltungsdosis für die übrigen Fächer.'; };
+    fpk.onchange=()=>{ S.settings.focusPeak=parseFloat(fpk.value); save(); render(); };
+  }
+
+  document.querySelectorAll('[data-act]').forEach(el=>{
+    el.onclick=ev=>{
+      const a=el.dataset.act;
+      if(a==='modal-bg'&&ev.target!==el) return;
+      ev.stopPropagation();
+      handle(a,el,ev);
+    };
+  });
+}
+
+function handle(a,el){
+  const id=el.dataset.id;
+  switch(a){
+    case 'learn-all': startSession(null); break;
+    case 'learn-deck': startSession(id||null); break;
+    case 'end-session': session=null; view='home'; render(); break;
+    case 'show': if(session){ session.shown=true; render(); } break;
+    case 'grade': grade(parseInt(el.dataset.g)); break;
+    case 'undo': undo(); break;
+
+    case 'new-deck': modal={type:'deck',deck:{name:'',examDate:'',color:DECK_COLORS[S.decks.length%DECK_COLORS.length]}}; render(); break;
+    case 'edit-deck': { const d=deckById(id); if(d) modal={type:'deck',deck:Object.assign({},d)}; render(); break; }
+    case 'pick-color': modal.deck.color=el.dataset.v; render(); break;
+    case 'save-deck': {
+      const name=(document.getElementById('m-name').value||'').trim();
+      if(!name){ toast('Bitte einen Namen eingeben.'); return; }
+      const exam=document.getElementById('m-exam').value||'';
+      if(modal.deck.id){
+        const d=deckById(modal.deck.id);
+        d.name=name; d.examDate=exam; d.color=modal.deck.color;
+      }else{
+        S.decks.push({id:uid(),name:name,examDate:exam,color:modal.deck.color,created:Date.now()});
+      }
+      save(); closeModal(); toast('Stapel gesichert.'); break;
+    }
+    case 'delete-deck': {
+      const d=deckById(id); const n=S.cards.filter(c=>c.deckId===id).length;
+      modal={type:'confirm',title:'Stapel löschen?',
+        text:'„'+(d?d.name:'')+'" und '+n+' Karten werden entfernt. Das lässt sich nicht rückgängig machen.',
+        fn:()=>{ S.decks=S.decks.filter(x=>x.id!==id); S.cards=S.cards.filter(c=>c.deckId!==id); save(); toast('Stapel gelöscht.'); }};
+      render(); break;
+    }
+
+    case 'new-card': {
+      const dId=browseFilter.deck||(S.decks[0]&&S.decks[0].id);
+      if(!dId){ toast('Lege zuerst einen Stapel an.'); return; }
+      modal={type:'card',card:{deckId:dId,type:'basic',front:'',back:'',note:'',tags:[]}}; render(); break;
+    }
+    case 'edit-card': { const c=S.cards.find(x=>x.id===id); if(c) modal={type:'card',card:Object.assign({},c)}; render(); break; }
+    case 'save-card': {
+      const front=(document.getElementById('m-front').value||'').trim();
+      const back=(document.getElementById('m-back').value||'').trim();
+      if(!front||!back){ toast('Vorder- und Rückseite dürfen nicht leer sein.'); return; }
+      const patch={
+        deckId:document.getElementById('m-deck').value,
+        type:document.getElementById('m-type').value,
+        front:front, back:back,
+        note:(document.getElementById('m-note').value||'').trim(),
+        tags:(document.getElementById('m-tags').value||'').split(',').map(t=>t.trim()).filter(Boolean)
+      };
+      if(modal.card.id){
+        const i=S.cards.findIndex(c=>c.id===modal.card.id);
+        S.cards[i]=Object.assign({},S.cards[i],patch);
+      }else{
+        S.cards.push(Object.assign({id:uid(),created:Date.now(),source:''},patch,newCardState()));
+      }
+      save(); closeModal(); toast('Karte gesichert.'); break;
+    }
+    case 'delete-card': {
+      modal={type:'confirm',title:'Karte löschen?',text:'Die Karte und ihr Lernstand werden entfernt.',
+        fn:()=>{ S.cards=S.cards.filter(c=>c.id!==id);
+                 if(session) session.pool=session.pool.filter(x=>x!==id);
+                 save(); if(session){pickNext();} toast('Karte gelöscht.'); }};
+      render(); break;
+    }
+    case 'reset-card': {
+      const i=S.cards.findIndex(c=>c.id===id);
+      if(i>=0) S.cards[i]=Object.assign({},S.cards[i],newCardState());
+      save(); closeModal(); toast('Karte gilt wieder als neu.'); break;
+    }
+
+    case 'export': doExport(); break;
+    case 'import': doImportFile(); break;
+    case 'paste-import': modal={type:'paste'}; render(); break;
+    case 'do-paste': {
+      const dId=document.getElementById('p-deck').value;
+      const txt=document.getElementById('p-text').value||'';
+      let n=0;
+      for(const line of txt.split('\n')){
+        const parts=line.split('|');
+        if(parts.length<2) continue;
+        const f=parts[0].trim(), b=parts.slice(1).join('|').trim();
+        if(!f||!b) continue;
+        S.cards.push(Object.assign({id:uid(),deckId:dId,type:'basic',front:f,back:b,
+          note:'',tags:[],source:'',created:Date.now()},newCardState()));
+        n++;
+      }
+      save(); closeModal();
+      toast(n?n+' Karten angelegt.':'Keine verwertbare Zeile gefunden.');
+      break;
+    }
+
+    case 'theme': S.settings.theme=el.dataset.v; save(); render(); break;
+    case 'newmode': S.settings.newMode=el.dataset.v; save(); render();
+      toast(S.settings.newMode==='auto'?'Taktung rechnet jetzt selbst.':'Feste Zahl aktiv.'); break;
+    case 'interleave': S.settings.interleave=el.dataset.v==='1'; save(); render();
+      toast(S.settings.interleave?'Themen werden gemischt.':'Themen werden blockweise abgearbeitet.'); break;
+    case 'reset':
+      modal={type:'confirm',title:'Wirklich alles löschen?',
+        text:'Sämtliche Stapel, Karten und dein gesamter Lernfortschritt werden entfernt. Sichere vorher, falls du zögerst.',
+        ok:'Ja, alles löschen',
+        fn:()=>{ S=defaultState(); save(); view='home'; toast('Alles zurückgesetzt.'); }};
+      render(); break;
+
+    case 'confirm-yes': { const fn=modal.fn; modal=null; if(fn) fn(); render(); break; }
+    case 'close-modal': case 'modal-bg': closeModal(); break;
+  }
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea,select')) return;
+  if(modal){
+    if(e.key==='Escape') closeModal();
+    return;
+  }
+  if(view!=='review'||!session) return;
+  if(e.key==='Escape'){ session=null; view='home'; render(); return; }
+  if(e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); return; }
+  if(!session.current) return;
+  if(!session.shown){
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); session.shown=true; render(); }
+    return;
+  }
+  if(e.key===' '||e.key==='Enter'){ e.preventDefault(); grade(3); return; }
+  if(['1','2','3','4'].includes(e.key)){ e.preventDefault(); grade(parseInt(e.key)); }
+});
+
+/* Offline-Betrieb auf der gehosteten Fassung; lokal geöffnet still übersprungen. */
+if('serviceWorker' in navigator && location.protocol==='https:'){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+save();
+render();
+</script>
+</body>
+</html>
