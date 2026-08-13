@@ -519,9 +519,27 @@ function esc(s){ return String(s==null?'':s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* Sehr kleine Auszeichnungssprache: **fett**, *kursiv*, `code`, Zeilenumbrüche,
-   Aufzählungen mit "- " am Zeilenanfang. */
+   Aufzählungen mit "- " am Zeilenanfang, Bilder als ![Text](bilder/datei.png).
+
+   Bilder liegen bewusst als eigene Dateien neben der App und nicht in der
+   Karte selbst: Der Browserspeicher fasst nur wenige Megabyte, und dort
+   gehören Karten und Lernstand hin. Erlaubt sind deshalb nur relative Pfade
+   unterhalb von bilder/ — nichts Fremdes, nichts von außen.
+
+   Reihenfolge: Das fertige <img>-Tag wird zuerst gegen einen Platzhalter
+   getauscht und erst ganz am Ende wieder eingesetzt. Sonst liefen die Regeln
+   für Code, fett und kursiv über das erzeugte HTML und zerlegten es — ein
+   Backtick im Bildtext genügte, um das Tag zu zerreißen. */
 function fmt(s){
   let t=esc(s);
+  const bilder=[];
+  t=t.replace(/!\[([^\]\n]*)\]\((bilder\/[A-Za-z0-9_\-.\/]+)\)/g,(ganz,alt,src)=>{
+    if(src.includes('..')) return ganz;
+    bilder.push('<img src="'+src+'" alt="'+alt+'" loading="lazy" '+
+      'style="display:block;max-width:100%;margin:12px auto 4px;border-radius:10px;background:#fff">'+
+      (alt?'<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:6px">'+alt+'</div>':''));
+    return '\u0001B'+(bilder.length-1)+'\u0001';
+  });
   t=t.replace(/`([^`]+)`/g,'<code style="background:var(--surface-3);padding:1px 5px;border-radius:4px;font-size:.9em">$1</code>');
   t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
   t=t.replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<i>$2</i>');
@@ -534,7 +552,7 @@ function fmt(s){
           out+= ln.trim()==='' ? '<div style="height:8px"></div>' : '<div>'+ln+'</div>'; }
   }
   if(inList) out+='</ul>';
-  return out;
+  return out.replace(/\u0001B(\d+)\u0001/g,(_,i)=>bilder[+i]||'');
 }
 
 const startOfDay=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x;};
@@ -1650,7 +1668,12 @@ function importData(data){
               : (data.deck||data.cards) ? [data] : null;
   if(!packs) throw new Error('weder Sicherung noch Kartenstapel');
 
-  let added=0, skipped=0, newDecks=0;
+  /* Standardmäßig werden Dubletten übersprungen — das schützt den Lernstand.
+     Trägt die Datei "aktualisieren": true, werden Rückseite, Notiz,
+     Schlagwörter und Quelle bestehender Karten ersetzt. Der Lernstand (Termin,
+     Stabilität, Schwierigkeit, Rückfälle) bleibt dabei unangetastet. */
+  const modusAktualisieren = data.aktualisieren===true;
+  let added=0, skipped=0, newDecks=0, updated=0;
   for(const p of packs){
     const meta=p.deck||{name:'Importiert',examDate:'',color:DECK_COLORS[0]};
     let deck=S.decks.find(d=>d.name.trim().toLowerCase()===String(meta.name||'').trim().toLowerCase());
@@ -1660,13 +1683,22 @@ function importData(data){
       S.decks.push(deck); newDecks++;
     }else if(meta.examDate&&!deck.examDate){ deck.examDate=meta.examDate; }
 
-    const existing=new Set(S.cards.filter(c=>c.deckId===deck.id)
-      .map(c=>String(c.front).trim().toLowerCase()));
+    const vorhanden=new Map();
+    for(const c of S.cards) if(c.deckId===deck.id)
+      vorhanden.set(String(c.front).trim().toLowerCase(),c);
     for(const raw of (p.cards||[])){
       const front=String(raw.front||'').trim();
       if(!front||!String(raw.back||'').trim()){ skipped++; continue; }
-      if(existing.has(front.toLowerCase())){ skipped++; continue; }
-      existing.add(front.toLowerCase());
+      const alt=vorhanden.get(front.toLowerCase());
+      if(alt){
+        if(!modusAktualisieren){ skipped++; continue; }
+        alt.back=String(raw.back).trim();
+        alt.note=raw.note?String(raw.note).trim():'';
+        if(Array.isArray(raw.tags)) alt.tags=raw.tags;
+        if(raw.source) alt.source=raw.source;
+        if(raw.type) alt.type=raw.type==='concept'?'concept':'basic';
+        updated++; continue;
+      }
       S.cards.push(Object.assign({
         id:uid(),deckId:deck.id,
         type:raw.type==='concept'?'concept':'basic',
@@ -1676,10 +1708,12 @@ function importData(data){
         source:raw.source||'', created:Date.now()
       },newCardState()));
       added++;
+      vorhanden.set(front.toLowerCase(),S.cards[S.cards.length-1]);
     }
   }
   save(); view='home'; render();
-  toast(added+' Karten übernommen'+(newDecks?', '+newDecks+' Stapel neu angelegt':'')+
+  toast(added+' Karten übernommen'+(updated?' · '+updated+' aktualisiert':'')+
+        (newDecks?', '+newDecks+' Stapel neu angelegt':'')+
         (skipped?' · '+skipped+' übersprungen (Dublette oder unvollständig)':''),5000);
 }
 
