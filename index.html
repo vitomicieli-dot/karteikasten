@@ -219,7 +219,7 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
 .chart h3{font-size:14.5px;margin-bottom:2px}
 .chart .csub{font-size:12.5px;color:var(--muted);margin-bottom:16px}
 .bars{display:flex;align-items:flex-end;gap:2px;height:132px;position:relative;
-  border-bottom:1px solid var(--line-2);padding-bottom:0}
+  border-bottom:1px solid var(--line-2);padding-bottom:0;margin-top:9px}
 .bars .gridline{position:absolute;left:0;right:0;border-top:1px dashed var(--line);pointer-events:none}
 .bars .gridline span{position:absolute;left:0;top:-8px;font-size:10px;color:var(--muted);
   background:var(--surface);padding:0 4px 0 0;font-variant-numeric:tabular-nums}
@@ -240,8 +240,25 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
 }
 .bar:hover .tip{opacity:1}
 .xaxis{display:flex;gap:2px;margin-top:7px}
+/* Bei 30 Balken ist eine Zelle nur wenige Pixel breit. Die Beschriftung steht
+   aber nur an jedem fünften Balken — sie darf deshalb über die leeren
+   Nachbarzellen hinausragen, statt abgeschnitten zu werden. */
 .xaxis > div{flex:1;text-align:center;font-size:10px;color:var(--muted);min-width:0;
-  overflow:hidden;font-variant-numeric:tabular-nums}
+  overflow:visible;white-space:nowrap;font-variant-numeric:tabular-nums;position:relative}
+/* Taktung: Name links, Zahlen rechts. Der Name darf umbrechen, die Zahlen
+   nicht — vorher quetschte eine vierspaltige Tabelle „27 offen" auf dem
+   iPhone in zwei Zeilen. */
+.pace-list{font-size:13.5px}
+.pace-row{display:flex;justify-content:space-between;align-items:baseline;
+  gap:12px;padding:5px 0}
+.pace-row + .pace-row{border-top:1px solid var(--line)}
+.pace-name{flex:1;min-width:0}
+.pace-nums{white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.pace-nums b{color:var(--ink);font-weight:640}
+@media(max-width:420px){
+  .pace-row{flex-direction:column;gap:1px;padding:7px 0}
+  .pace-nums{padding-left:15px}
+}
 .stackbar{display:flex;gap:2px;height:34px;border-radius:8px;overflow:hidden;margin-bottom:13px}
 .stackbar > div{transition:filter .12s;position:relative}
 .stackbar > div:hover{filter:brightness(1.25)}
@@ -1421,16 +1438,15 @@ function viewSettings(){
       const rest=S.cards.filter(c=>c.deckId===d.id&&c.state==='new').length;
       if(!rest) return '';
       const u=daysUntil(d.examDate);
-      return '<tr><td style="padding:4px 0"><span class="dot" style="display:inline-block;background:'+esc(d.color)+
-        ';margin-right:7px"></span>'+esc(d.name)+'</td>'+
-        '<td style="text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">'+rest+' offen</td>'+
-        '<td style="text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">'+
-          (u==null?'ohne Termin':(u<0?'Termin vorbei':u+' T.'))+'</td>'+
-        '<td style="text-align:right;font-weight:640;font-variant-numeric:tabular-nums">'+
-          (plan.need[d.id]||0)+'/Tag</td></tr>';
+      return '<div class="pace-row">'+
+        '<span class="pace-name"><span class="dot" style="display:inline-block;background:'+esc(d.color)+
+          ';margin-right:7px"></span>'+esc(d.name)+'</span>'+
+        '<span class="pace-nums">'+rest+' offen · '+
+          (u==null?'ohne Termin':(u<0?'Termin vorbei':u+' T.'))+
+          ' · <b>'+(plan.need[d.id]||0)+'/Tag</b></span></div>';
     }).join('');
     h+= rows
-      ? '<table style="width:100%;font-size:13.5px;border-collapse:collapse">'+rows+'</table>'+
+      ? '<div class="pace-list">'+rows+'</div>'+
         '<p class="hint" style="margin:12px 0 0">Macht zusammen <b>'+plan.required+' neue Karten am Tag</b>, '+
         'um jedes Fach rechtzeitig durchzubekommen.'+
         (plan.capped?' Deine Obergrenze liegt bei '+plan.ceiling+' — das reicht rechnerisch nicht. '+
