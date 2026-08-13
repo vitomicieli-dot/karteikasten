@@ -3,7 +3,7 @@
    Programmdateien zwischengespeichert — Karten und Lernstand liegen im
    localStorage und werden hier nicht angefasst. */
 
-const CACHE = 'karteikasten-v1';
+const CACHE = 'karteikasten-v2';
 const DATEIEN = ['./', './index.html', './sw.js'];
 
 self.addEventListener('install', e => {
@@ -29,8 +29,12 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request)
       .then(res => {
-        const kopie = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, kopie));
+        /* Nur erfolgreiche Antworten merken. Sonst landet eine Fehlerseite des
+           Servers im Cache und wird offline anstelle der App ausgeliefert. */
+        if (res && res.ok && res.type !== 'opaque') {
+          const kopie = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, kopie));
+        }
         return res;
       })
       .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
