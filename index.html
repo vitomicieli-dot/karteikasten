@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Karteikasten">
 <meta name="theme-color" content="#0d0d0d">
 <title>Karteikasten</title>
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233987e5'/%3E%3Crect x='14' y='18' width='36' height='24' rx='4' fill='%23fff' opacity='.35'/%3E%3Crect x='18' y='24' width='36' height='24' rx='4' fill='%23fff'/%3E%3C/svg%3E">
 <style>
 /* ---------- Design-Token ---------- */
@@ -150,7 +151,11 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
 
 /* ---------- Lernansicht ---------- */
 .review-wrap{max-width:680px;margin:0 auto}
-.rev-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+/* Die Lernansicht blendet die normale Kopfzeile aus. Damit die Leiste nicht
+   unter Uhrzeit und Dynamic Island rutscht, holt sie sich den Sicherheitsabstand
+   des Geräts selbst. Ohne Aussparung (Desktop, Android) bleibt der Wert 0. */
+.rev-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;
+  padding-top:env(safe-area-inset-top,0px)}
 .rev-counts{display:flex;gap:14px;font-size:13.5px;font-variant-numeric:tabular-nums;font-weight:600}
 .rev-counts span{display:flex;align-items:center;gap:5px}
 .progress{height:3px;background:var(--surface-3);border-radius:99px;overflow:hidden;margin-bottom:20px}
@@ -298,7 +303,9 @@ const DEFAULT_W=[0.4872,1.4003,3.7145,13.8206,5.1618,1.2298,0.8975,0.0310,
                  1.6474,0.1367,1.0461,2.1072,0.0793,0.3246,1.5870,0.2272,2.8755];
 const DECAY=-0.5, FACTOR=Math.pow(0.9,1/DECAY)-1;
 const MIN=60000, DAY=86400000;
-const LEARNING_STEPS=[1*MIN,10*MIN], RELEARNING_STEPS=[10*MIN];
+/* Drei Lernschritte: zweimal am selben Abend, einmal am Folgetag. Eine Karte
+   verlässt die Lernphase also erst, wenn sie über Nacht überlebt hat. */
+const LEARNING_STEPS=[1*MIN,10*MIN,1*DAY], RELEARNING_STEPS=[10*MIN];
 const clampD=d=>Math.min(Math.max(d,1),10), clampS=s=>Math.max(s,0.01);
 
 const retrievability=(t,S)=>S<=0?0:Math.pow(1+FACTOR*t/S,DECAY);
@@ -321,9 +328,33 @@ function newCardState(){
   return {state:'new',due:null,stability:null,difficulty:null,reps:0,lapses:0,
           step:0,lastReview:null,scheduledDays:0};
 }
+/* Fälligkeit eines Lernschritts. Ein Schritt von einem Tag oder mehr wird auf
+   den Beginn des Zieltages gelegt — sonst wäre eine um 21 Uhr gelernte Karte
+   am Folgetag erst wieder um 21 Uhr fällig und fiele aus dem Lernabend heraus. */
+function lernschrittFaellig(nowMs,spanne){
+  let ms=nowMs+spanne;
+  if(spanne>=DAY){
+    const d=new Date(ms); d.setHours(0,0,0,0);
+    /* Mindestens acht Stunden Abstand. Wer um 23:55 lernt, dessen „Beginn des
+       nächsten Tages" läge sonst fünf Minuten später — kürzer als der
+       Zehn-Minuten-Schritt davor, und die Karte käme mitten in derselben
+       Sitzung zurück. So landet sie am Morgen danach. */
+    ms=Math.max(d.getTime(),nowMs+8*60*60*1000);
+  }
+  return new Date(ms).toISOString();
+}
+/* Passt der Lernschritt überhaupt noch vor die Prüfung? Wenn nicht, hat die
+   Lernphase ihren Zweck verloren: Die Karte wird als Wiederholung geführt und
+   von der prüfungsbewussten Rechnung weiter unten terminiert. Sonst könnte
+   „Gut" kurz vor dem Termin einen kürzeren Abstand ergeben als „Schwer". */
+function schrittPasst(nowMs,spanne,opts){
+  const examMs=opts&&opts.examDate?new Date(opts.examDate).getTime():null;
+  if(!examMs||examMs<=nowMs) return true;
+  return nowMs+spanne<=examMs;
+}
 function schedule(card,grade,now,opts){
   opts=opts||{};
-  const w=opts.w||DEFAULT_W, request=opts.desiredRetention||0.9;
+  const w=opts.w||DEFAULT_W, request=opts.desiredRetention||0.95;
   const maxInterval=opts.maximumInterval||1095, nowMs=now.getTime();
   const next=Object.assign({},card);
   next.reps=(card.reps||0)+1;
@@ -334,8 +365,24 @@ function schedule(card,grade,now,opts){
   if(card.state==='new'||card.stability==null){
     next.difficulty=initialDifficulty(w,grade);
     next.stability=initialStability(w,grade);
+  }else if(card.state==='learning'){
+    /* Kurzfristphase: Die Formel für echte Wiederholungen taugt hier nicht.
+       Sie rechnet mit der Vergessenswahrscheinlichkeit, und die ist wenige
+       Minuten nach der letzten Ansicht exakt null — der gesamte Zuwachs würde
+       mit null multipliziert und „Leicht" bliebe wirkungslos. Deshalb zählt in
+       der Lernphase die zuletzt gedrückte Note. */
+    next.difficulty=nextDifficulty(w,card.difficulty,grade);
+    next.stability=initialStability(w,grade);
+  }else if(card.state==='relearning'){
+    /* Nach einem Rückfall hat stabilityAfterLapse bereits einen Wert aus der
+       Vorgeschichte der Karte berechnet. Den darf die Note nicht einfach
+       überschreiben — eine Karte, die ein halbes Jahr saß, ist auch nach einem
+       Aussetzer mehr wert als eine frisch gelernte. Die Note kann ihn nur
+       anheben, nicht senken. */
+    next.difficulty=nextDifficulty(w,card.difficulty,grade);
+    next.stability=Math.max(card.stability,initialStability(w,grade));
   }else{
-    const r=card.state==='review'?retrievability(elapsed,card.stability):1;
+    const r=retrievability(elapsed,card.stability);
     next.difficulty=nextDifficulty(w,card.difficulty,grade);
     next.stability=grade===1
       ? stabilityAfterLapse(w,card.difficulty,card.stability,r)
@@ -351,24 +398,31 @@ function schedule(card,grade,now,opts){
   else if(inLearning){
     let step=card.state==='new'?0:(card.step||0);
     if(grade===1) step=0; else if(grade===3) step+=1;
-    if(step>=LEARNING_STEPS.length){ next.state='review'; next.step=0; }
+    if(step>=LEARNING_STEPS.length||!schrittPasst(nowMs,LEARNING_STEPS[step],opts)){
+      next.state='review'; next.step=0; }
     else{ next.state='learning'; next.step=step; next.scheduledDays=0;
-          next.due=new Date(nowMs+LEARNING_STEPS[step]).toISOString(); return next; }
+          next.due=lernschrittFaellig(nowMs,LEARNING_STEPS[step]); return next; }
   }
   else if(inRelearning){
     let step=card.state==='relearning'?(card.step||0):0;
     if(grade===1) step=0; else if(grade===3) step+=1;
-    if(step>=RELEARNING_STEPS.length){ next.state='review'; next.step=0; }
+    if(step>=RELEARNING_STEPS.length||!schrittPasst(nowMs,RELEARNING_STEPS[step],opts)){
+      next.state='review'; next.step=0; }
     else{ next.state='relearning'; next.step=step; next.scheduledDays=0;
-          next.due=new Date(nowMs+RELEARNING_STEPS[step]).toISOString(); return next; }
+          next.due=lernschrittFaellig(nowMs,RELEARNING_STEPS[step]); return next; }
   }
   else{ next.state='review'; next.step=0; }
 
   let days=Math.min(Math.max(Math.round(intervalForRetention(next.stability,request)),1),maxInterval);
   const examMs=opts.examDate?new Date(opts.examDate).getTime():null;
   if(examMs&&examMs>nowMs){
-    const d2e=(examMs-nowMs)/DAY;
-    days=Math.min(days, d2e<=3?1:Math.max(1,Math.floor(d2e*0.6)));
+    /* Prüfungsdeckel. Früher wurde hart gekappt — dann liefen Schwer, Gut und
+       Leicht gegen dieselbe Obergrenze und zeigten dieselbe Zahl, die
+       Bewertung wurde wirkungslos. Jetzt wird gestaucht: Die Kurve nähert
+       sich dem Termin an, ohne ihn je zu erreichen, und ein längeres
+       Intervall bleibt immer länger als ein kürzeres. */
+    const d2e=(examMs-nowMs)/DAY, ziel=Math.max(1,d2e*0.9);
+    days=Math.max(1,Math.min(days,Math.round(ziel*(1-Math.exp(-days/ziel)))));
   }
   let dueMs=nowMs+days*DAY;
   if(examMs&&examMs>nowMs&&dueMs>examMs){ dueMs=examMs; days=Math.max(0,Math.round((dueMs-nowMs)/DAY)); }
@@ -403,11 +457,11 @@ function defaultState(){
                                     created:Date.now()+i}));
   return {
     v:1, decks:decks, cards:[], log:[],
-    settings:{desiredRetention:0.9,newPerDay:40,maximumInterval:1095,theme:'dark',
+    settings:{desiredRetention:0.95,newPerDay:40,maximumInterval:1095,theme:'dark',
               interleave:true,retryGap:3,focusDays:14,focusPeak:0.8,newMode:'auto'}
   };
 }
-const DEFAULT_SETTINGS={desiredRetention:0.9,newPerDay:40,maximumInterval:1095,
+const DEFAULT_SETTINGS={desiredRetention:0.95,newPerDay:40,maximumInterval:1095,
                         theme:'dark',interleave:true,retryGap:3,
                         focusDays:14,focusPeak:0.8,newMode:'auto'};
 
@@ -418,14 +472,26 @@ try{
 }catch(e){ S=defaultState(); }
 if(!S||!S.decks) S=defaultState();
 S.settings=Object.assign({},DEFAULT_SETTINGS,S.settings||{});
+
+/* Einmalige Anhebung der Zielretention von 0,90 auf 0,95. Vor einer Prüfung
+   mit festem Termin ist Vergessen teuer, deshalb engmaschiger. Läuft genau
+   einmal; wer den Regler danach bewusst zurückstellt, behält seinen Wert. */
+if(!S.settings.retV2){
+  if(S.settings.desiredRetention===0.9) S.settings.desiredRetention=0.95;
+  S.settings.retV2=true;
+}
 S.log=S.log||[]; S.cards=S.cards||[]; S.decks=S.decks||[];
 
-let saveWarned=false;
+let saveWarned=0;
 function save(){
-  try{ localStorage.setItem(LS,JSON.stringify(S)); }
+  try{ localStorage.setItem(LS,JSON.stringify(S)); saveWarned=0; return true; }
   catch(e){
-    if(!saveWarned){ saveWarned=true;
-      toast('Speicher voll — bitte unter Einstellungen sichern und aufräumen.',6000); }
+    /* Nicht nur einmal warnen: Ein stiller Fehlschlag heißt, dass jede weitere
+       Bewertung verloren geht. Höchstens alle 30 Sekunden, um nicht zu nerven. */
+    const jetzt=Date.now();
+    if(jetzt-saveWarned>30000){ saveWarned=jetzt;
+      toast('Speichern fehlgeschlagen — Speicher voll. Bitte sichern und aufräumen, sonst geht dein Fortschritt verloren.',8000); }
+    return false;
   }
 }
 
@@ -474,7 +540,21 @@ function fmtDateDE(d){
 }
 function daysUntil(dateStr){
   if(!dateStr) return null;
-  return Math.ceil((startOfDay(dateStr)-startOfDay(new Date()))/DAY);
+  /* Nicht in Millisekunden rechnen: Über die Zeitumstellung ist ein Tag 23
+     oder 25 Stunden lang, Math.ceil rundete dadurch einen ganzen Tag auf.
+     Kalendertage zählen ist unabhängig von der Uhr. */
+  return kalendertage(startOfDay(new Date()),startOfDay(dateStr));
+}
+/* Datum um n Kalendertage verschieben. Über die Zeitumstellung entstand beim
+   Addieren von Millisekunden sonst ein doppelter Tag im Diagramm. */
+function tagPlus(d,n){
+  const x=new Date(d); x.setDate(x.getDate()+n); x.setHours(0,0,0,0); return x;
+}
+/* Ganze Kalendertage zwischen zwei Zeitpunkten, zeitumstellungsfest. */
+function kalendertage(von,bis){
+  const a=Date.UTC(von.getFullYear(),von.getMonth(),von.getDate());
+  const b=Date.UTC(bis.getFullYear(),bis.getMonth(),bis.getDate());
+  return Math.round((b-a)/DAY);
 }
 const deckById=id=>S.decks.find(d=>d.id===id);
 function schedOpts(deckId){
@@ -584,7 +664,14 @@ function pacePlan(now){
   }
 
   let alloc=need, capped=false;
-  if(ceiling>0&&required>ceiling){
+  /* 0 heißt „keine neuen Karten", nicht „keine Bremse". Früher schaltete die 0
+     die Deckelung ab und bewirkte damit das Gegenteil des Gewollten. Wichtig:
+     ein vollständiges Plan-Objekt zurückgeben — die Einstellungsseite liest
+     need und required und stürzte sonst ab. */
+  if(ceiling===0)
+    return {mode:'auto',ceiling:0,usedTotal:usedTotal,budget:{},need:need,
+            alloc:{},required:required,capped:required>0};
+  if(required>ceiling){
     capped=true;
     alloc={};
     const active=S.decks.filter(d=>need[d.id]>0)
@@ -665,6 +752,7 @@ function startSession(deckId){
   session={deckId:deckId,pool:ids,done:0,planned:total,shown:false,current:null,
            startedAt:Date.now(),recent:[],retry:{},
            focus:deckId?null:focusState(),focusCount:0,lastSeen:{}};
+  undoStack=[];   /* Rücknahme gilt nur innerhalb der laufenden Sitzung */
   pickNext(); view='review'; render();
 }
 
@@ -825,6 +913,10 @@ function grade(g){
   const upd=schedule(card,g,now,schedOpts(card.deckId));
   S.cards[idx]=Object.assign({},card,upd);
   S.log.push({d:dayKey(now),t:now.getTime(),c:card.id,g:g,was:card.state});
+  /* Das Protokoll wächst sonst unbegrenzt und füllt irgendwann den Speicher.
+     Ausgewertet werden höchstens 30 Tage. Beim Kürzen verschieben sich die
+     Indizes, auf die die Rücknahme zeigt — deshalb wird sie mit entwertet. */
+  if(S.log.length>20000){ S.log=S.log.slice(-20000); undoStack=[]; }
   session.done++;
   if(session.focus&&session.focus.ids[card.deckId]) session.focusCount++;
   session.lastSeen[card.deckId]=session.done;
@@ -846,8 +938,10 @@ function grade(g){
 }
 
 function undo(){
+  if(!session){ toast('Zurücknehmen geht nur während einer Lernsitzung.'); return; }
   const u=undoStack.pop();
   if(!u){ toast('Nichts zum Zurücknehmen.'); return; }
+  if(u.logLen>S.log.length){ toast('Diese Bewertung lässt sich nicht mehr zurücknehmen.'); return; }
   const i=S.cards.findIndex(c=>c.id===u.card.id);
   if(i>=0) S.cards[i]=u.card;
   S.log.length=u.logLen;
@@ -1164,7 +1258,7 @@ function viewBrowse(){
     let due='—';
     if(c.state==='new') due='neu';
     else if(c.due){
-      const dd=Math.ceil((startOfDay(c.due)-startOfDay(new Date()))/DAY);
+      const dd=kalendertage(startOfDay(new Date()),startOfDay(c.due));
       due = dd<0?'überfällig':(dd===0?'heute':(dd===1?'morgen':'in '+dd+' T.'));
     }
     h+='<tr class="clickable" data-act="edit-card" data-id="'+c.id+'" style="cursor:pointer">'+
@@ -1204,7 +1298,7 @@ function viewStats(){
   let overdue=0;
   for(const c of S.cards){
     if(c.state==='new'||!c.due) continue;
-    const off=Math.ceil((startOfDay(c.due)-startOfDay(now))/DAY);
+    const off=kalendertage(startOfDay(now),startOfDay(c.due));
     if(off<0) overdue++;
     else if(off<days) buckets[off]++;
   }
@@ -1226,14 +1320,14 @@ function viewStats(){
   }
   for(let i=0;i<days;i++){
     const v=buckets[i];
-    const dt=new Date(startOfDay(now).getTime()+i*DAY);
+    const dt=tagPlus(startOfDay(now),i);
     h+='<div class="bar'+(v?' nz':'')+'" tabindex="0">'+
        '<div class="tip"><b>'+v+'</b> '+(v===1?'Karte':'Karten')+' · '+wd[dt.getDay()]+' '+fmtDateDE(dt)+'</div>'+
        '<i style="height:'+(v/niceMax*100).toFixed(2)+'%"></i></div>';
   }
   h+='</div><div class="xaxis">';
   for(let i=0;i<days;i++){
-    const dt=new Date(startOfDay(now).getTime()+i*DAY);
+    const dt=tagPlus(startOfDay(now),i);
     h+='<div>'+((i%5===0||i===0)?dt.getDate()+'.'+(dt.getMonth()+1)+'.':'')+'</div>';
   }
   h+='</div></div>';
@@ -1267,7 +1361,7 @@ function viewStats(){
   /* Aktivität der letzten 14 Tage */
   const act=[];
   for(let i=13;i>=0;i--){
-    const dt=new Date(startOfDay(now).getTime()-i*DAY);
+    const dt=tagPlus(startOfDay(now),-i);
     act.push({dt:dt,n:S.log.filter(l=>l.d===dayKey(dt)).length});
   }
   const anice=roundUpEven(Math.max(...act.map(a=>a.n)));
@@ -1522,11 +1616,17 @@ function doImportFile(){
 function importData(data){
   if(!data||typeof data!=='object') throw new Error('unbekanntes Format');
 
-  if(data.v&&Array.isArray(data.decks)&&Array.isArray(data.cards)&&data.settings){
+  if(data.v&&Array.isArray(data.decks)&&Array.isArray(data.cards)){
     modal={type:'confirm',title:'Sicherung einspielen?',
       text:'Das ersetzt deinen jetzigen Stand vollständig: '+data.cards.length+' Karten in '+
            data.decks.length+' Stapeln, samt Lernfortschritt.',
-      ok:'Ja, ersetzen', fn:()=>{ S=data; S.log=S.log||[]; save(); view='home'; toast('Sicherung eingespielt.'); }};
+      ok:'Ja, ersetzen', fn:()=>{
+        S=data;
+        /* Fehlende Felder ergänzen — eine alte oder von Hand gebaute Sicherung
+           kann Einstellungen weglassen, sonst rechnet die App mit undefined. */
+        S.settings=Object.assign({},DEFAULT_SETTINGS,S.settings||{});
+        S.log=S.log||[]; S.cards=S.cards||[]; S.decks=S.decks||[];
+        save(); view='home'; toast('Sicherung eingespielt.'); }};
     render(); return;
   }
 
@@ -1626,7 +1726,7 @@ function handle(a,el){
   switch(a){
     case 'learn-all': startSession(null); break;
     case 'learn-deck': startSession(id||null); break;
-    case 'end-session': session=null; view='home'; render(); break;
+    case 'end-session': session=null; undoStack=[]; view='home'; render(); break;
     case 'show': if(session){ session.shown=true; render(); } break;
     case 'grade': grade(parseInt(el.dataset.g)); break;
     case 'undo': undo(); break;
@@ -1731,13 +1831,16 @@ function handle(a,el){
 }
 
 document.addEventListener('keydown',e=>{
-  if(e.target.matches('input,textarea,select')) return;
+  if(e.target.matches('input,textarea,select')){
+    if(e.key==='Escape'&&modal){ e.target.blur(); closeModal(); }
+    return;
+  }
   if(modal){
     if(e.key==='Escape') closeModal();
     return;
   }
   if(view!=='review'||!session) return;
-  if(e.key==='Escape'){ session=null; view='home'; render(); return; }
+  if(e.key==='Escape'){ session=null; undoStack=[]; view='home'; render(); return; }
   if(e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); return; }
   if(!session.current) return;
   if(!session.shown){
