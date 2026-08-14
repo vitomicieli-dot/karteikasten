@@ -37,6 +37,9 @@
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;height:100%}
+/* iOS vergrößert in manchen Layouts eigenmächtig die Schrift ("text
+   autosizing"). Dann greifen kleinere Schriftgrade nicht wie erwartet. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   background:var(--bg); color:var(--ink);
   font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -196,18 +199,25 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
   color:var(--good);display:grid;place-items:center;margin:0 auto 18px;font-size:26px}
 
 /* ---------- Verwalten ---------- */
-.tbl{width:100%;border-collapse:collapse;font-size:14px}
+ /* table-layout:fixed ist hier entscheidend. Ohne das richten sich die
+    Spalten nach der längsten Frage, die Tabelle wird breiter als das Display
+    und läuft rechts heraus — und iOS vergrößert in solchen zu breiten Blöcken
+    von sich aus die Schrift. Mit fester Aufteilung greift das Abschneiden
+    per Auslassungspunkten, und der eingestellte Schriftgrad gilt wirklich. */
+.tbl{width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px}
+.tbl td,.tbl th{overflow:hidden}
+.tbl th.c-frage{width:44%}
 /* Drei Stufen für die Kartenliste. Herauszoomen ist keine Lösung: Der Browser
    verkleinert dabei die ganze Oberfläche samt Kopfzeile mit. */
-.tbl.eng{font-size:12px}
-.tbl.eng td{padding:6px 7px;line-height:1.3}
-.tbl.eng th{padding:4px 7px;font-size:10px}
-.tbl.eng .state-badge{font-size:9.5px;padding:1px 6px}
-.tbl.sehr-eng{font-size:10.5px}
-.tbl.sehr-eng td{padding:3.5px 6px;line-height:1.25}
-.tbl.sehr-eng th{padding:3px 6px;font-size:9px}
-.tbl.sehr-eng .state-badge{font-size:8.5px;padding:0 5px}
-.tbl.sehr-eng .pill{font-size:9px;padding:0 5px}
+/* Die Kartenliste wird stufenlos über --lp gesteuert (Schriftgrad in Pixel).
+   Abstände und Plaketten wachsen und schrumpfen proportional mit, sonst
+   bringt eine kleinere Schrift kaum mehr Zeilen aufs Bild. */
+.tbl.frei{font-size:var(--lp)}
+.tbl.frei td{padding:calc(var(--lp) * .42) calc(var(--lp) * .55);line-height:1.28}
+.tbl.frei th{padding:calc(var(--lp) * .3) calc(var(--lp) * .55);font-size:calc(var(--lp) * .8)}
+.tbl.frei .state-badge{font-size:calc(var(--lp) * .78);padding:0 calc(var(--lp) * .45)}
+.tbl.frei .pill{font-size:calc(var(--lp) * .78);padding:0 calc(var(--lp) * .45)}
+.tbl.frei .dot{width:calc(var(--lp) * .5);height:calc(var(--lp) * .5)}
 .tbl th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;
   color:var(--muted);font-weight:620;padding:0 10px 9px;border-bottom:1px solid var(--line)}
 .tbl td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -312,6 +322,9 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
   .grade .iv{font-size:10.5px}
   .kbd,.keyhelp{display:none}
   .tbl td.hide-s,.tbl th.hide-s{display:none}
+  /* Auf dem Telefon sind nur Frage und Zustand sichtbar — dann gehört der
+     Frage der Löwenanteil der Breite. */
+  .tbl th.c-frage{width:74%}
   .kpi .v{font-size:23px}
 }
 @media print{.no-print{display:none}}
@@ -486,12 +499,12 @@ function defaultState(){
                                     created:Date.now()+i}));
   return {
     v:1, decks:decks, cards:[], log:[],
-    settings:{desiredRetention:0.95,newPerDay:40,maximumInterval:1095,theme:'dark',listSize:'kompakt',
+    settings:{desiredRetention:0.95,newPerDay:40,maximumInterval:1095,theme:'dark',listPx:11,
               interleave:true,retryGap:3,focusDays:14,focusPeak:0.8,newMode:'auto'}
   };
 }
 const DEFAULT_SETTINGS={desiredRetention:0.95,newPerDay:40,maximumInterval:1095,
-                        theme:'dark',listSize:'kompakt',interleave:true,retryGap:3,
+                        theme:'dark',listPx:11,interleave:true,retryGap:3,
                         focusDays:14,focusPeak:0.8,newMode:'auto'};
 
 let S;
@@ -527,6 +540,15 @@ function save(){
 /* ==========================================================================
    3. Hilfsfunktionen
    ========================================================================== */
+/* Schriftgrad der Kartenliste in Pixel. Übernimmt die früheren drei Stufen,
+   damit eine bestehende Einstellung nicht verlorengeht. */
+function listPx(){
+  const alt={normal:14,kompakt:12,'sehr-kompakt':10.5}[S.settings.listSize];
+  const px=Number(S.settings.listPx!=null?S.settings.listPx:(alt!=null?alt:11));
+  if(!Number.isFinite(px)) return 11;   /* kaputter Wert aus einer Sicherung */
+  return Math.min(16,Math.max(7,px));
+}
+
 function esc(s){ return String(s==null?'':s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -1296,9 +1318,9 @@ function viewBrowse(){
     return h;
   }
 
-  const eng={normal:'',kompakt:' eng','sehr-kompakt':' sehr-eng'}[S.settings.listSize]||' eng';
-  h+='<div class="card" style="padding:14px 6px"><table class="tbl'+eng+'"><thead><tr>'+
-     '<th style="width:44%">Frage</th><th class="hide-s">Stapel</th><th>Zustand</th>'+
+  h+='<div class="card" style="padding:14px 6px">'+
+     '<table class="tbl frei" style="--lp:'+listPx()+'px"><thead><tr>'+
+     '<th class="c-frage">Frage</th><th class="hide-s">Stapel</th><th>Zustand</th>'+
      '<th class="hide-s">Fällig</th></tr></thead><tbody>';
   for(const c of list.slice(0,400)){
     const d=deckById(c.deckId);
@@ -1310,7 +1332,7 @@ function viewBrowse(){
       due = dd<0?'überfällig':(dd===0?'heute':(dd===1?'morgen':'in '+dd+' T.'));
     }
     h+='<tr class="clickable" data-act="edit-card" data-id="'+c.id+'" style="cursor:pointer">'+
-      '<td><div class="truncate" style="max-width:100%;font-weight:520">'+esc(c.front)+'</div>'+
+      '<td><div class="truncate" style="font-weight:520">'+esc(c.front)+'</div>'+
         (c.type==='concept'?'<span class="pill" style="margin-top:4px;background:rgba(217,89,38,.16);color:#d95926">Zusammenhang</span>':'')+'</td>'+
       '<td class="hide-s"><span class="row" style="gap:6px"><span class="dot" style="background:'+
         esc(d?d.color:'#888')+'"></span><span class="truncate" style="max-width:110px">'+esc(d?d.name:'—')+'</span></span></td>'+
@@ -1536,14 +1558,14 @@ function viewSettings(){
       '<button class="btn sm'+(s.theme==='light'?' primary':'')+'" data-act="theme" data-v="light">Hell</button>'+
     '</div>'+
     '<label class="fld" style="margin-bottom:0"><span>Schriftgröße in der Kartenliste</span>'+
-    '<div class="row" style="gap:8px">'+
-      ['normal','kompakt','sehr-kompakt'].map(v=>
-        '<button class="btn sm'+((s.listSize||'kompakt')===v?' primary':'')+
-        '" data-act="listsize" data-v="'+v+'">'+
-        {normal:'Normal',kompakt:'Kompakt','sehr-kompakt':'Sehr kompakt'}[v]+'</button>').join('')+
-    '</div>'+
-    '<div class="hint" style="margin-top:6px">Betrifft nur die Liste unter „Karten". '+
-    'Je enger, desto mehr Karten siehst du auf einen Blick.</div></label></div>';
+      '<input type="range" id="s-lp" min="7" max="16" step="0.5" value="'+listPx()+'" style="width:100%;padding:0">'+
+      '<div class="hint" style="margin-top:6px" id="s-lp-lbl">'+listPx()+' Pixel — '+
+      'ganz links passen etwa doppelt so viele Karten aufs Bild wie ganz rechts.</div>'+
+      '<div class="tbl frei" style="--lp:'+listPx()+'px;margin-top:10px" id="s-lp-probe">'+
+        '<div style="padding:calc(var(--lp) * .42) 0;border-bottom:1px solid var(--line)">Beispiel: Was ist die Standzeit eines Werkzeugs?</div>'+
+        '<div style="padding:calc(var(--lp) * .42) 0">Beispiel: Wie heißen die drei Winkel am Schneidkeil?</div>'+
+      '</div>'+
+    '</label></div>';
 
   const totalReviews=S.log.length;
   h+='<div class="card" style="margin-bottom:14px">'+
@@ -1766,6 +1788,19 @@ function bind(){
         ' % — je höher, desto häufiger die Wiederholungen und desto mehr Arbeit pro Tag.';
     };
     ret.onchange=()=>{ S.settings.desiredRetention=parseFloat(ret.value); save(); toast('Gespeichert.'); };
+  const lp=document.getElementById('s-lp');
+  if(lp){
+    const zeig=()=>{
+      const v=parseFloat(lp.value);
+      const probe=document.getElementById('s-lp-probe');
+      if(probe) probe.style.setProperty('--lp',v+'px');
+      const lbl=document.getElementById('s-lp-lbl');
+      if(lbl) lbl.textContent=String(v).replace('.',',')+' Pixel — ganz links passen etwa '+
+        'doppelt so viele Karten aufs Bild wie ganz rechts.';
+    };
+    lp.oninput=zeig;
+    lp.onchange=()=>{ S.settings.listPx=parseFloat(lp.value); save(); zeig(); };
+  }
   }
   const sn=document.getElementById('s-new');
   if(sn) sn.onchange=()=>{ S.settings.newPerDay=Math.max(0,parseInt(sn.value)||0); save(); toast('Gespeichert.'); };
@@ -1886,7 +1921,7 @@ function handle(a,el){
     }
 
     case 'theme': S.settings.theme=el.dataset.v; save(); render(); break;
-    case 'listsize': S.settings.listSize=el.dataset.v; save(); render(); break;
+
     case 'newmode': S.settings.newMode=el.dataset.v; save(); render();
       toast(S.settings.newMode==='auto'?'Taktung rechnet jetzt selbst.':'Feste Zahl aktiv.'); break;
     case 'interleave': S.settings.interleave=el.dataset.v==='1'; save(); render();
