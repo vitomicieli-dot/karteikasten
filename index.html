@@ -589,6 +589,15 @@ function fmt(s){
   return out.replace(/\u0001B(\d+)\u0001/g,(_,i)=>bilder[+i]||'');
 }
 
+/* In der Kartenliste ist nur eine Zeile Platz. Steht das Bild auf der Frage-
+   seite, wuerde dort der Dateipfad die halbe Vorschau fuellen. Die Bildangabe
+   wird deshalb auf ihren Bildtext eingedampft. */
+function ohneBild(s){
+  return String(s==null?'':s)
+    .replace(/!\[([^\]\n]*)\]\(bilder\/[^)\s]*\)/g,(ganz,alt)=>alt?'['+alt+'] ':'')
+    .replace(/\s+/g,' ').trim();
+}
+
 const startOfDay=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x;};
 const dayKey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
 
@@ -1332,7 +1341,7 @@ function viewBrowse(){
       due = dd<0?'überfällig':(dd===0?'heute':(dd===1?'morgen':'in '+dd+' T.'));
     }
     h+='<tr class="clickable" data-act="edit-card" data-id="'+c.id+'" style="cursor:pointer">'+
-      '<td><div class="truncate" style="font-weight:520">'+esc(c.front)+'</div>'+
+      '<td><div class="truncate" style="font-weight:520">'+esc(ohneBild(c.front))+'</div>'+
         (c.type==='concept'?'<span class="pill" style="margin-top:4px;background:rgba(217,89,38,.16);color:#d95926">Zusammenhang</span>':'')+'</td>'+
       '<td class="hide-s"><span class="row" style="gap:6px"><span class="dot" style="background:'+
         esc(d?d.color:'#888')+'"></span><span class="truncate" style="max-width:110px">'+esc(d?d.name:'—')+'</span></span></td>'+
