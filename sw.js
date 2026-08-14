@@ -3,7 +3,7 @@
    Programmdateien und die Bilder zwischengespeichert — Karten und Lernstand
    liegen im localStorage und werden hier nicht angefasst. */
 
-const CACHE = 'karteikasten-v5';
+const CACHE = 'karteikasten-v7';
 
 /* Ohne diese Dateien läuft die App nicht. Schlägt eine fehl, scheitert die
    Installation — das ist gewollt, ein halber Cache wäre schlimmer. */
