@@ -296,6 +296,12 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
   padding:22px;-webkit-overflow-scrolling:touch}
 .modal h2{font-size:18px;margin-bottom:16px}
 .modal-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.vorschau{border:1px solid var(--line-2);border-radius:12px;padding:16px;background:var(--surface-2)}
+.vorschau .vq{font-size:16px;line-height:1.5}
+.vorschau .va{font-size:14.5px;line-height:1.55;color:var(--ink-2)}
+.vorschau .vn{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:9px}
+.vorschau hr{border:0;border-top:1px solid var(--line-2);margin:14px 0}
+.vorschau img{max-width:100%}
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(env(safe-area-inset-bottom) + 22px);
@@ -1606,6 +1612,25 @@ function renderModal(){
   else if(modal.type==='confirm') inner=modalConfirm();
   return '<div class="modal-bg" data-act="modal-bg"><div class="modal">'+inner+'</div></div>';
 }
+/* Zeigt die Karte so, wie sie in der Lernansicht erscheint — mit Bildern.
+   Damit muss für eine Sichtprüfung keine Lernsitzung gestartet werden. */
+function vorschauHtml(front,back,note){
+  const f=(front||'').trim(), b=(back||'').trim(), n=(note||'').trim();
+  if(!f&&!b) return '<div class="va" style="color:var(--muted)">Noch nichts eingetragen.</div>';
+  return '<div class="vq">'+(f?fmt(f):'<span style="color:var(--muted)">Vorderseite fehlt</span>')+'</div>'+
+         '<hr>'+
+         '<div class="va">'+(b?fmt(b):'<span style="color:var(--muted)">Rückseite fehlt</span>')+'</div>'+
+         (n?'<div class="vn">'+fmt(n)+'</div>':'');
+}
+
+/* Textfelder wachsen mit dem Inhalt. Ohne das zeigt ein Feld auf dem iPhone
+   drei Zeilen, und der Rest einer längeren Antwort bleibt unsichtbar. */
+function mitwachsen(el){
+  if(!el) return;
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight+2,520)+'px';
+}
+
 function modalCard(){
   const c=modal.card;
   const isNew=!c.id;
@@ -1623,6 +1648,9 @@ function modalCard(){
       '<div class="hint" style="margin-top:5px">Erscheint kleiner unter der Antwort. Gut für Begründung, Eselsbrücke oder Quelle.</div></label>'+
     '<label class="fld"><span>Schlagwörter, mit Komma getrennt</span>'+
       '<input type="text" id="m-tags" value="'+esc((c.tags||[]).join(', '))+'"></label>'+
+    '<div class="fld"><span style="display:block;font-size:12.5px;font-weight:580;'+
+      'color:var(--ink-2);margin-bottom:5px;letter-spacing:.01em">Vorschau</span>'+
+      '<div class="vorschau" id="m-preview">'+vorschauHtml(c.front,c.back,c.note)+'</div></div>'+
     '<div class="modal-actions">'+
       (isNew?'':'<button class="btn danger" data-act="delete-card" data-id="'+c.id+'">Löschen</button>'+
               '<button class="btn" data-act="reset-card" data-id="'+c.id+'">Fortschritt zurücksetzen</button>')+
@@ -1779,6 +1807,16 @@ function bind(){
   document.querySelectorAll('[data-nav]').forEach(el=>{
     el.onclick=()=>{ view=el.dataset.nav; session=null; render(); };
   });
+
+  const mf=document.getElementById('m-front'), mb=document.getElementById('m-back'),
+        mn=document.getElementById('m-note'), mp=document.getElementById('m-preview');
+  if(mf||mb||mn){
+    const frisch=()=>{ if(mp) mp.innerHTML=vorschauHtml(mf&&mf.value,mb&&mb.value,mn&&mn.value); };
+    [mf,mb,mn].forEach(el=>{ if(!el) return;
+      mitwachsen(el);
+      el.addEventListener('input',()=>{ mitwachsen(el); frisch(); });
+    });
+  }
 
   const q=document.getElementById('f-q');
   if(q){
