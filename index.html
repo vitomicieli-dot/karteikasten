@@ -514,7 +514,11 @@ function defaultState(){
 }
 const DEFAULT_SETTINGS={desiredRetention:0.95,newPerDay:40,maximumInterval:1095,
                         theme:'dark',listPx:11,interleave:true,retryGap:3,
-                        focusDays:14,focusPeak:0.8,newMode:'auto'};
+                        focusDays:14,focusPeak:0.8,newMode:'auto',lastExport:null};
+
+/* Selbsttätige Sicherung in ein privates GitHub-Repository. Leere Felder
+   heißen: nicht eingerichtet — dann passiert nichts. */
+const SICHERUNG_VORGABE={repo:'',token:'',intervalH:24,lastOk:null,fehler:0,letzterFehler:''};
 
 let S;
 try{
@@ -523,6 +527,9 @@ try{
 }catch(e){ S=defaultState(); }
 if(!S||!S.decks) S=defaultState();
 S.settings=Object.assign({},DEFAULT_SETTINGS,S.settings||{});
+/* Object.assign geht nur eine Ebene tief — der Block für die Sicherung muss
+   eigens ergänzt werden, sonst fehlen bei älteren Ständen einzelne Felder. */
+S.settings.sicherung=Object.assign({},SICHERUNG_VORGABE,S.settings.sicherung||{});
 
 /* Einmalige Anhebung der Zielretention von 0,90 auf 0,95. Vor einer Prüfung
    mit festem Termin ist Vergessen teuer, deshalb engmaschiger. Läuft genau
@@ -1092,6 +1099,24 @@ function viewHome(){
     (totalNow>0?'<button class="btn primary" data-act="learn-all" style="padding:13px 26px;font-size:16px">Alles lernen</button>':'')+
     '</div>';
 
+  /* Erinnerung an die Sicherung. Sie erscheint erst, wenn seit zwei Tagen
+     weder von Hand noch selbsttätig gesichert wurde — und nur, wenn es
+     überhaupt etwas zu verlieren gibt. */
+  if(S.cards.length){
+    const letzte=letzteSicherung();
+    const faellig=!letzte || Date.now()-letzte>=48*3600*1000;
+    if(faellig){
+      h+='<div class="focus-banner" style="border-left-color:var(--warn,#c98500)">'+
+        '<div class="fb-dot" style="background:var(--warn,#c98500)"></div>'+
+        '<div class="grow"><b>Sicherung fällig</b>'+
+        '<div class="hint" style="margin-top:2px">'+
+          (letzte?'Zuletzt gesichert '+seitWann(letzte)+'.':'Es gibt noch keine Sicherung.')+
+          ' Deine Karten liegen nur auf diesem iPhone.</div></div>'+
+        '<button class="btn sm" data-act="export" style="flex:none">Jetzt sichern</button>'+
+      '</div>';
+    }
+  }
+
   const plan=pacePlan();
   if(plan.mode==='auto'&&plan.capped){
     h+='<div class="focus-banner" style="border-left-color:var(--crit)">'+
@@ -1569,7 +1594,33 @@ function viewSettings(){
       '<button class="btn" data-act="paste-import">Text einfügen</button>'+
     '</div>'+
     '<p class="hint" style="margin:12px 0 0">Die Sicherung enthält Stapel, Karten und deinen kompletten Lernstand. '+
-    'Sinnvoll etwa einmal pro Woche — und immer, bevor du den Browserverlauf löschst.</p>'+
+    'Sie landet dort, wo du sie im Fenster von iOS ablegst — sinnvollerweise im Ordner <b>Sicherungen</b>.</p>'+
+    '<p class="hint" style="margin:8px 0 0">'+sicherungStand()+'</p>'+
+    '</div>';
+
+  const sc=sicherungCfg();
+  h+='<div class="card" style="margin-bottom:14px">'+
+    '<h3 class="sec-title">Selbsttätige Sicherung</h3>'+
+    '<p class="hint" style="margin:0 0 14px">Das iPhone schickt deinen Lernstand beim Öffnen der App '+
+    'direkt an ein privates GitHub-Repository — ohne dein Zutun und ohne Umweg über den Mac. '+
+    'Bleiben die Felder leer, passiert nichts.</p>'+
+    '<label class="fld"><span>Repository (Besitzer/Name)</span>'+
+      '<input type="text" id="s-repo" autocapitalize="off" autocorrect="off" spellcheck="false" '+
+      'placeholder="vitomicieli-dot/karteikasten-sicherung" value="'+esc(sc.repo)+'"></label>'+
+    '<label class="fld"><span>Schlüssel</span>'+
+      '<input type="password" id="s-token" autocapitalize="off" autocorrect="off" spellcheck="false" '+
+      'placeholder="github_pat_…" value="'+esc(sc.token)+'">'+
+      '<div class="hint" style="margin-top:5px">Nur mit Schreibrecht auf dieses eine Repository. '+
+      'Er bleibt auf diesem iPhone und wird nirgendwo sonst hingeschickt.</div></label>'+
+    '<label class="fld"><span>Abstand</span><select id="s-abstand">'+
+      [[6,'alle 6 Stunden'],[12,'alle 12 Stunden'],[24,'einmal am Tag'],[72,'alle 3 Tage']]
+        .map(o=>'<option value="'+o[0]+'"'+(Number(sc.intervalH)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+
+    '</select></label>'+
+    '<div class="row" style="gap:8px;flex-wrap:wrap">'+
+      '<button class="btn" data-act="cloud-jetzt">Jetzt hochladen</button>'+
+      '<button class="btn ghost" data-act="cloud-loeschen">Zugang entfernen</button>'+
+    '</div>'+
+    '<p class="hint" style="margin:12px 0 0">'+wolkenStand()+'</p>'+
     '</div>';
 
   h+='<div class="card" style="margin-bottom:14px">'+
@@ -1712,7 +1763,132 @@ function doExport(){
   a.download='karteikasten-sicherung-'+dayKey(new Date())+'.json';
   document.body.appendChild(a); a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+  S.settings.lastExport=Date.now(); save();
   toast('Sicherung gespeichert.');
+  render();
+}
+
+/* ==========================================================================
+   7b. Selbsttätige Sicherung zu GitHub
+   ==========================================================================
+   Das iPhone schickt den Lernstand direkt an die GitHub-Schnittstelle — ohne
+   Umweg über den Mac. Der Zeitstempel wird erst gesetzt, wenn GitHub den
+   Empfang bestätigt hat; eine gescheiterte Sicherung gilt also nie als
+   erledigt. */
+
+function sicherungCfg(){ return S.settings.sicherung; }
+
+function seitWann(ms){
+  if(!ms) return null;
+  const std=(Date.now()-ms)/3600000;
+  if(std<1) return 'gerade eben';
+  if(std<24) return 'vor '+Math.round(std)+(Math.round(std)===1?' Stunde':' Stunden');
+  const t=Math.round(std/24);
+  return 'vor '+t+(t===1?' Tag':' Tagen');
+}
+
+function sicherungStand(){
+  const m=letzteSicherung();
+  return m ? 'Letzte Sicherung: '+seitWann(m)+' ('+fmtDateTimeDE(m)+').'
+           : 'Bisher wurde noch keine Sicherung gespeichert.';
+}
+
+function wolkenStand(){
+  const c=sicherungCfg();
+  if(!String(c.token).trim()||!repoGueltig(c.repo)) return 'Noch nicht eingerichtet.';
+  if(c.fehler>0) return '<b style="color:var(--crit)">Zuletzt fehlgeschlagen'+
+    (c.fehler>1?' ('+c.fehler+u_mal(c.fehler)+')':'')+':</b> '+esc(c.letzterFehler)+
+    (c.lastOk?' — letzte erfolgreiche Sicherung '+seitWann(c.lastOk)+'.':' — es gab noch keine erfolgreiche Sicherung.');
+  return c.lastOk ? 'Zuletzt hochgeladen: '+seitWann(c.lastOk)+' ('+fmtDateTimeDE(c.lastOk)+').'
+                  : 'Eingerichtet, aber noch nichts hochgeladen.';
+}
+function u_mal(n){ return n===1?' Mal':' Mal'; }
+
+function fmtDateTimeDE(ms){
+  const d=new Date(ms), z=n=>String(n).padStart(2,'0');
+  return z(d.getDate())+'.'+z(d.getMonth()+1)+'.'+d.getFullYear()+', '+z(d.getHours())+':'+z(d.getMinutes());
+}
+
+/* Wann wurde zuletzt überhaupt gesichert — von Hand oder selbsttätig? */
+function letzteSicherung(){
+  const c=sicherungCfg();
+  const a=Number(S.settings.lastExport)||0, b=Number(c.lastOk)||0;
+  const m=Math.max(a,b);
+  return m>0?m:null;
+}
+
+function b64utf8(text){
+  const bytes=new TextEncoder().encode(text);
+  let bin=''; const BLOCK=0x8000;
+  for(let i=0;i<bytes.length;i+=BLOCK) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+BLOCK));
+  return btoa(bin);
+}
+
+/* Beide Teile müssen mit Buchstabe oder Ziffer beginnen — sonst käme etwa
+   "../etc" durch und der Pfad zeigte woandershin. */
+function repoGueltig(r){
+  const t=String(r||'').trim();
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(t) && !t.includes('..');
+}
+
+async function ghAnfrage(pfad,optionen){
+  const c=sicherungCfg();
+  const o=Object.assign({headers:{}},optionen||{});
+  o.headers=Object.assign({
+    'Authorization':'Bearer '+String(c.token).trim(),
+    'Accept':'application/vnd.github+json',
+    'X-GitHub-Api-Version':'2022-11-28'
+  },o.headers);
+  return fetch('https://api.github.com/repos/'+String(c.repo).trim()+pfad,o);
+}
+
+let sicherungLaeuft=false;
+
+async function inDieWolke(manuell){
+  const c=sicherungCfg();
+  if(sicherungLaeuft) return {ok:false,grund:'läuft schon'};
+  if(!String(c.token).trim()||!repoGueltig(c.repo)){
+    if(manuell) toast('Erst Repository und Schlüssel eintragen.',4000);
+    return {ok:false,grund:'nicht eingerichtet'};
+  }
+  sicherungLaeuft=true;
+  if(manuell) toast('Sicherung wird hochgeladen …');
+  const datei='sicherungen/karteikasten-sicherung-'+dayKey(new Date())+'.json';
+  try{
+    /* Liegt für heute schon eine Datei, braucht GitHub deren Kennung, sonst
+       lehnt es das Überschreiben ab. */
+    let sha=null;
+    const vorhanden=await ghAnfrage('/contents/'+datei,{method:'GET'});
+    if(vorhanden.ok){ const j=await vorhanden.json(); sha=j.sha||null; }
+    else if(vorhanden.status!==404) throw new Error('Lesen fehlgeschlagen ('+vorhanden.status+')');
+    const koerper={message:'Sicherung '+new Date().toISOString(),
+                   content:b64utf8(JSON.stringify(S))};
+    if(sha) koerper.sha=sha;
+    const antwort=await ghAnfrage('/contents/'+datei,{method:'PUT',body:JSON.stringify(koerper)});
+    if(!antwort.ok){
+      let text=''; try{ const j=await antwort.json(); text=j.message||''; }catch(e){}
+      throw new Error((text||'Fehler')+' ('+antwort.status+')');
+    }
+    c.lastOk=Date.now(); c.fehler=0; c.letzterFehler='';
+    save();
+    if(manuell){ toast('Sicherung hochgeladen.'); render(); }
+    return {ok:true};
+  }catch(e){
+    c.fehler=(c.fehler||0)+1;
+    c.letzterFehler=String(e&&e.message||e);
+    save();
+    if(manuell){ toast('Sicherung fehlgeschlagen: '+c.letzterFehler,6000); render(); }
+    return {ok:false,grund:c.letzterFehler};
+  }finally{ sicherungLaeuft=false; }
+}
+
+/* Beim Start: Ist die letzte bestätigte Sicherung älter als der eingestellte
+   Abstand, wird im Hintergrund eine neue hochgeladen. */
+function sicherungPruefen(){
+  const c=sicherungCfg();
+  if(!String(c.token).trim()||!repoGueltig(c.repo)) return;
+  const abstand=Math.max(1,Number(c.intervalH)||24)*3600*1000;
+  if(!c.lastOk||Date.now()-Number(c.lastOk)>=abstand) inDieWolke(false);
 }
 
 function doImportFile(){
@@ -1746,6 +1922,7 @@ function importData(data){
         /* Fehlende Felder ergänzen — eine alte oder von Hand gebaute Sicherung
            kann Einstellungen weglassen, sonst rechnet die App mit undefined. */
         S.settings=Object.assign({},DEFAULT_SETTINGS,S.settings||{});
+        S.settings.sicherung=Object.assign({},SICHERUNG_VORGABE,S.settings.sicherung||{});
         S.log=S.log||[]; S.cards=S.cards||[]; S.decks=S.decks||[];
         save(); view='home'; toast('Sicherung eingespielt.'); }};
     render(); return;
@@ -1823,6 +2000,12 @@ function bind(){
       el.addEventListener('input',()=>{ mitwachsen(el); frisch(); });
     });
   }
+
+  const sr=document.getElementById('s-repo'), st=document.getElementById('s-token'),
+        sa=document.getElementById('s-abstand');
+  if(sr) sr.onchange=()=>{ sicherungCfg().repo=sr.value.trim(); save(); toast('Gespeichert.'); };
+  if(st) st.onchange=()=>{ sicherungCfg().token=st.value.trim(); save(); toast('Gespeichert.'); };
+  if(sa) sa.onchange=()=>{ sicherungCfg().intervalH=Number(sa.value)||24; save(); toast('Gespeichert.'); };
 
   const q=document.getElementById('f-q');
   if(q){
@@ -1953,6 +2136,23 @@ function handle(a,el){
     }
 
     case 'export': doExport(); break;
+    case 'cloud-jetzt': {
+      const c=sicherungCfg();
+      c.repo=(document.getElementById('s-repo').value||'').trim();
+      c.token=(document.getElementById('s-token').value||'').trim();
+      c.intervalH=Number(document.getElementById('s-abstand').value)||24;
+      save();
+      inDieWolke(true);
+      break;
+    }
+    case 'cloud-loeschen': {
+      modal={type:'confirm',title:'Zugang entfernen?',
+        text:'Repository und Schlüssel werden aus der App gelöscht. Bereits hochgeladene Sicherungen bleiben bei GitHub liegen.',
+        ok:'Ja, entfernen', fn:()=>{
+          S.settings.sicherung=Object.assign({},SICHERUNG_VORGABE);
+          save(); toast('Zugang entfernt.'); }};
+      render(); break;
+    }
     case 'import': doImportFile(); break;
     case 'paste-import': modal={type:'paste'}; render(); break;
     case 'do-paste': {
@@ -2019,6 +2219,7 @@ if('serviceWorker' in navigator && location.protocol==='https:'){
 
 save();
 render();
+sicherungPruefen();
 </script>
 </body>
 </html>
