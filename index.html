@@ -36,7 +36,7 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0;height:100%}
+html,body{touch-action:manipulation;margin:0;padding:0;height:100%}
 /* iOS vergrößert in manchen Layouts eigenmächtig die Schrift ("text
    autosizing"). Dann greifen kleinere Schriftgrade nicht wie erwartet. */
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
@@ -331,6 +331,10 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
   .grade .iv{font-size:10.5px}
   .kbd,.keyhelp{display:none}
   .tbl td.hide-s,.tbl th.hide-s{display:none}
+  /* Die Kurzinfo über einem Balken erscheint nur beim Überfahren mit der Maus.
+     Auf dem iPhone gibt es das nicht — dort ragte sie nur seitlich aus der
+     Seite heraus und machte sie waagerecht verschiebbar. */
+  .bar .tip{display:none}
   /* Auf dem Telefon sind nur Frage und Zustand sichtbar — dann gehört der
      Frage der Löwenanteil der Breite. */
   .tbl th.c-frage{width:74%}
@@ -403,6 +407,45 @@ function schrittPasst(nowMs,spanne,opts){
   if(!examMs||examMs<=nowMs) return true;
   return nowMs+spanne<=examMs;
 }
+/* ---- Endspurt vor einer Prüfung ------------------------------------------
+   Die Prüfungsbremse allein staucht alle Abstände so weit zusammen, dass am
+   Vortag praktisch der gesamte Stapel fällig wird — bei 2000 Karten mehrere
+   Stunden, und das am schlechtesten denkbaren Tag. Landet eine Karte im
+   Endspurtfenster, bekommt sie stattdessen einen festen Platz auf einem der
+   letzten Tage.
+
+   Der Platz hängt allein an der Karte, nicht an der gedrückten Note. Nur so
+   bleibt die Ordnung erhalten: „Leicht" darf nie einen früheren Termin
+   ergeben als „Gut". Und er ist stabil — dieselbe Karte landet bei jeder
+   Wiederholung auf demselben Tag, statt im Kreis zu laufen. */
+const ENDSPURT_TAGE=4;
+/* Ab welcher vorhergesagten Behaltenswahrscheinlichkeit am Prüfungstag eine
+   Karte in Ruhe gelassen wird. Was nach dem Modell ohnehin mit über 90 Prozent
+   sitzt, muss nicht noch einmal vorgelegt werden — der Endspurt ist für das
+   Wackelige da, nicht für das, was seit Wochen sicher ist. */
+const ENDSPURT_SCHWELLE=0.90;
+const tagesBeginn=ms=>{ const d=new Date(ms); d.setHours(0,0,0,0); return d.getTime(); };
+
+/* Die Tage des Fensters, die überhaupt noch in der Zukunft liegen. Mindestens
+   acht Stunden Abstand, sonst käme die Karte noch in derselben Sitzung zurück. */
+function endspurtTage(nowMs,examMs){
+  const tage=[];
+  for(let k=ENDSPURT_TAGE;k>=1;k--){
+    const d=tagesBeginn(examMs-k*DAY);
+    if(d>=nowMs+8*60*60*1000) tage.push(d);
+  }
+  return tage;
+}
+/* FNV-1a über die Kartenkennung: gleichmäßig verteilt und ohne Zufall, damit
+   dieselbe Karte immer denselben Tag bekommt. */
+function endspurtPlatz(id,anzahl){
+  if(!anzahl) return 0;
+  const t=String(id==null?'':id);
+  let h=2166136261>>>0;
+  for(let i=0;i<t.length;i++){ h^=t.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  return h%anzahl;
+}
+
 function schedule(card,grade,now,opts){
   opts=opts||{};
   const w=opts.w||DEFAULT_W, request=opts.desiredRetention||0.95;
@@ -466,7 +509,22 @@ function schedule(card,grade,now,opts){
 
   let days=Math.min(Math.max(Math.round(intervalForRetention(next.stability,request)),1),maxInterval);
   const examMs=opts.examDate?new Date(opts.examDate).getTime():null;
-  if(examMs&&examMs>nowMs){
+  /* Beginn des Endspurts: der Tagesbeginn des frühesten der letzten Tage. */
+  const fensterStart=examMs?tagesBeginn(examMs-ENDSPURT_TAGE*DAY):null;
+  /* Innerhalb des Endspurts wird nicht mehr gestaucht. Jede Karte hat dort
+     ihren einen festen Durchgang; danach entscheidet der natürliche Abstand,
+     ob sie vor der Prüfung noch einmal kommt. Ohne das käme sie an jedem der
+     letzten Tage wieder und der Endspurt wäre viermal derselbe Stapel. */
+  /* Wackelt die Karte? Beurteilt wird der Zustand, mit dem sie in diese
+     Wiederholung geht — bewusst ohne die gerade gedrückte Note. Sonst nähme
+     „Leicht" einen anderen Weg als „Gut", und ein leichter Abstand könnte vor
+     einem schweren landen. Neue Karten und Karten in der Lernphase gelten
+     immer als wackelig. */
+  const tageBisPruefung=examMs?(examMs-nowMs)/DAY:0;
+  const sitztSicher = examMs && card.state==='review' && card.stability>0 &&
+                      retrievability(tageBisPruefung,card.stability)>=ENDSPURT_SCHWELLE;
+  const vorEndspurt=examMs&&examMs>nowMs&&nowMs<fensterStart&&!sitztSicher;
+  if(vorEndspurt){
     /* Prüfungsdeckel. Früher wurde hart gekappt — dann liefen Schwer, Gut und
        Leicht gegen dieselbe Obergrenze und zeigten dieselbe Zahl, die
        Bewertung wurde wirkungslos. Jetzt wird gestaucht: Die Kurve nähert
@@ -476,7 +534,14 @@ function schedule(card,grade,now,opts){
     days=Math.max(1,Math.min(days,Math.round(ziel*(1-Math.exp(-days/ziel)))));
   }
   let dueMs=nowMs+days*DAY;
-  if(examMs&&examMs>nowMs&&dueMs>examMs){ dueMs=examMs; days=Math.max(0,Math.round((dueMs-nowMs)/DAY)); }
+  /* Alles, was vor dem Fenster liegt, bleibt unangetastet — sonst könnte eine
+     Karte durch die Verteilung vor einen kürzeren Abstand rutschen. */
+  if(vorEndspurt&&dueMs>fensterStart){
+    const tage=endspurtTage(nowMs,examMs);
+    dueMs = tage.length ? tage[endspurtPlatz(card&&card.id,tage.length)] : examMs;
+    if(dueMs>examMs) dueMs=examMs;
+    days=Math.max(0,Math.round((dueMs-nowMs)/DAY));
+  }
   next.scheduledDays=days;
   next.due=new Date(dueMs).toISOString();
   return next;
@@ -2210,6 +2275,13 @@ document.addEventListener('keydown',e=>{
   }
   if(e.key===' '||e.key==='Enter'){ e.preventDefault(); grade(3); return; }
   if(['1','2','3','4'].includes(e.key)){ e.preventDefault(); grade(parseInt(e.key)); }
+});
+
+/* Auf der Statistikseite gibt es nichts zu vergrößern, das Aufziehen mit zwei
+   Fingern verschob die Seite dort nur unlesbar zur Seite. Auf den Karten
+   bleibt es erlaubt — eine Skizze will man manchmal größer sehen. */
+['gesturestart','gesturechange','gestureend'].forEach(name=>{
+  document.addEventListener(name, e=>{ if(view==='stats') e.preventDefault(); }, {passive:false});
 });
 
 /* Offline-Betrieb auf der gehosteten Fassung; lokal geöffnet still übersprungen. */
