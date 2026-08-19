@@ -299,6 +299,11 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
   padding:22px;-webkit-overflow-scrolling:touch}
 .modal h2{font-size:18px;margin-bottom:16px}
 .modal-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+/* Kartenpflege in der Lernansicht: bewusst unscheinbar und mit Abstand zu den
+   Bewertungsknöpfen. */
+.kartenpflege{display:flex;gap:10px;justify-content:center;margin-top:22px}
+.kartenpflege .btn{opacity:.55;font-size:13px;min-height:36px;padding:8px 14px}
+.kartenpflege .btn:hover{opacity:1}
 .vorschau{border:1px solid var(--line-2);border-radius:12px;padding:16px;background:var(--surface-2)}
 .vorschau .vq{font-size:16px;line-height:1.5}
 .vorschau .va{font-size:14.5px;line-height:1.55;color:var(--ink-2)}
@@ -494,8 +499,18 @@ function schedule(card,grade,now,opts){
     if(grade===1) step=0; else if(grade===3) step+=1;
     if(step>=LEARNING_STEPS.length||!schrittPasst(nowMs,LEARNING_STEPS[step],opts)){
       next.state='review'; next.step=0; }
-    else{ next.state='learning'; next.step=step; next.scheduledDays=0;
-          next.due=lernschrittFaellig(nowMs,LEARNING_STEPS[step]); return next; }
+    else{
+      /* „Schwer" lässt den Lernschritt stehen. Bei einer nagelneuen Karte steht
+         er aber schon auf dem ersten — „Nochmal" und „Schwer" zeigten deshalb
+         beide 1 Minute, und der Knopf war wirkungslos. „Schwer" bekommt hier
+         die Mitte zum nächsten Schritt, damit die Leiter durchgehend steigt:
+         1 · 5 · 10 Minuten statt 1 · 1 · 10. */
+      let spanne=LEARNING_STEPS[step];
+      if(grade===2&&step===0&&LEARNING_STEPS.length>1)
+        spanne=Math.max(LEARNING_STEPS[0]+MIN,
+                        Math.floor((LEARNING_STEPS[0]+LEARNING_STEPS[1])/2/MIN)*MIN);
+      next.state='learning'; next.step=step; next.scheduledDays=0;
+      next.due=lernschrittFaellig(nowMs,spanne); return next; }
   }
   else if(inRelearning){
     let step=card.state==='relearning'?(card.step||0):0;
@@ -1096,20 +1111,55 @@ function grade(g){
   save(); pickNext(); render();
 }
 
+/* Löschen aus der Lernansicht. Die Karte wandert auf denselben Stapel wie eine
+   Bewertung, damit der Pfeil oben rechts sie zurückholt — eine Rückfrage
+   schützt vor dem Danebentippen, nicht vor dem Irrtum. */
+function karteLoeschen(id){
+  const i=S.cards.findIndex(c=>c.id===id);
+  if(i<0) return;
+  const karte=JSON.parse(JSON.stringify(S.cards[i]));
+  if(session){
+    undoStack.push({geloescht:karte, stelle:i, logLen:S.log.length,
+                    done:session.done, current:session.current,
+                    recent:session.recent.slice(), retry:Object.assign({},session.retry),
+                    pool:session.pool.slice(),
+                    focusCount:session.focusCount, lastSeen:Object.assign({},session.lastSeen)});
+    if(undoStack.length>40) undoStack.shift();
+  }
+  S.cards.splice(i,1);
+  if(session){
+    session.pool=session.pool.filter(x=>x!==id);
+    if(session.planned>0) session.planned--;
+    pickNext();
+  }
+  save(); render(); toast('Karte gelöscht.');
+}
+
 function undo(){
   if(!session){ toast('Zurücknehmen geht nur während einer Lernsitzung.'); return; }
   const u=undoStack.pop();
   if(!u){ toast('Nichts zum Zurücknehmen.'); return; }
-  if(u.logLen>S.log.length){ toast('Diese Bewertung lässt sich nicht mehr zurücknehmen.'); return; }
-  const i=S.cards.findIndex(c=>c.id===u.card.id);
-  if(i>=0) S.cards[i]=u.card;
+  if(u.logLen>S.log.length){ toast('Das lässt sich nicht mehr zurücknehmen.'); return; }
+  if(u.geloescht){
+    /* Eine gelöschte Karte kommt an ihre alte Stelle zurück, damit die
+       Reihenfolge in der Kartenliste erhalten bleibt. */
+    if(!S.cards.some(c=>c.id===u.geloescht.id))
+      S.cards.splice(Math.min(u.stelle,S.cards.length),0,u.geloescht);
+    if(session){
+      session.pool=u.pool||session.pool;
+      session.planned=(session.planned||0)+1;
+    }
+  }else{
+    const i=S.cards.findIndex(c=>c.id===u.card.id);
+    if(i>=0) S.cards[i]=u.card;
+  }
   S.log.length=u.logLen;
   if(session){
     session.done=u.done; session.current=u.current; session.shown=true;
     session.recent=u.recent||[]; session.retry=u.retry||{};
     session.focusCount=u.focusCount||0; session.lastSeen=u.lastSeen||{};
   }
-  save(); render(); toast('Bewertung zurückgenommen.');
+  save(); render(); toast(u.geloescht?'Karte wiederhergestellt.':'Bewertung zurückgenommen.');
 }
 
 function toast(msg,ms){
@@ -1345,6 +1395,11 @@ function viewReview(){
     pills+='<span class="pill" style="background:rgba(217,89,38,.16);color:#d95926">Zusammenhang</span>';
   if(session.retry[card.id]!=null)
     pills+='<span class="pill" style="background:rgba(208,59,59,.16);color:var(--crit)">Wiedervorlage</span>';
+  /* Wie oft hatte er diese Karte schon vor sich? Gezählt wird jede Bewertung,
+     auch die Wiedervorlagen desselben Abends — genau das will er wissen. */
+  const gesehen=card.reps|0;
+  pills+='<span class="pill" style="background:rgba(57,135,229,.16);color:var(--ord-4)">'+
+         (gesehen?gesehen+'×':'Neu')+'</span>';
 
   h+='<div class="qcard"><div class="pillrow">'+pills+'</div><div class="qtext">'+fmt(card.front)+'</div>';
 
@@ -1376,6 +1431,15 @@ function viewReview(){
          '<span class="kbd">'+g+'</span></button>';
     }
     h+='</div>';
+  }
+
+  /* Bearbeiten und Löschen erst nach dem Aufdecken, klein und mit Abstand zu
+     den Bewertungsknöpfen — daneben zu tippen wäre hier teuer. */
+  if(session.shown){
+    h+='<div class="kartenpflege no-print">'+
+       '<button class="btn ghost sm" data-act="karte-bearbeiten">Bearbeiten</button>'+
+       '<button class="btn ghost sm" data-act="karte-loeschen">Löschen</button>'+
+       '</div>';
   }
 
   if(card.state==='review'&&card.stability){
@@ -2186,6 +2250,23 @@ function handle(a,el){
         S.cards.push(Object.assign({id:uid(),created:Date.now(),source:''},patch,newCardState()));
       }
       save(); closeModal(); toast('Karte gesichert.'); break;
+    }
+    case 'karte-bearbeiten': {
+      if(!session||!session.current) break;
+      const c=S.cards.find(x=>x.id===session.current);
+      if(c){ modal={type:'card',card:Object.assign({},c)}; render(); }
+      break;
+    }
+    case 'karte-loeschen': {
+      if(!session||!session.current) break;
+      const cid=session.current;
+      const c=S.cards.find(x=>x.id===cid);
+      if(!c) break;
+      const anfang=ohneBild(c.front);
+      modal={type:'confirm',title:'Karte wirklich löschen?',
+        text:'„'+(anfang.length>90?anfang.slice(0,90)+'…':anfang)+'“ — die Karte und ihr Lernstand werden entfernt. Zurücknehmen geht mit dem Pfeil oben rechts.',
+        ok:'Ja, löschen', fn:()=>{ karteLoeschen(cid); }};
+      render(); break;
     }
     case 'delete-card': {
       modal={type:'confirm',title:'Karte löschen?',text:'Die Karte und ihr Lernstand werden entfernt.',
