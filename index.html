@@ -179,6 +179,7 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
 .anote b{color:var(--ink)}
 .tagrow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:18px}
 .grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:18px}
+.grades.grades-3{grid-template-columns:repeat(3,1fr)}
 .grade{
   padding:13px 6px 11px;border-radius:12px;background:var(--surface-2);
   border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:3px;
@@ -363,9 +364,18 @@ const DEFAULT_W=[0.4872,1.4003,3.7145,13.8206,5.1618,1.2298,0.8975,0.0310,
                  1.6474,0.1367,1.0461,2.1072,0.0793,0.3246,1.5870,0.2272,2.8755];
 const DECAY=-0.5, FACTOR=Math.pow(0.9,1/DECAY)-1;
 const MIN=60000, DAY=86400000;
-/* Drei Lernschritte: zweimal am selben Abend, einmal am Folgetag. Eine Karte
-   verlässt die Lernphase also erst, wenn sie über Nacht überlebt hat. */
-const LEARNING_STEPS=[1*MIN,10*MIN,1*DAY], RELEARNING_STEPS=[10*MIN];
+/* Drei Knöpfe statt vier (Festlegung 29.08.2026). „Schwer" ist der einzige
+   Knopf für „saß nicht" und legt keinen Abstand fest — er holt die Karte in
+   dieselbe Einheit zurück. Die frühere Minutenleiter 1 · 5 · 10 entfällt.
+
+   Eine neue Karte wird zweimal je Einheit vorgelegt: die erste Vorlage ist
+   Lesen, erst die zweite ein Abruf aus dem Gedächtnis. Danach der nächste
+   Morgen, dann der normale wachsende Abstand.
+
+   Die Stufen sind Tage. 0 heißt: noch in dieser Einheit, der Abstand wird
+   dann nicht von der Uhr, sondern in Karten gemessen (`retryGap`). */
+const LERN_STUFEN=[0,1];
+const HART=2;   // interne Note des Knopfes „Schwer"
 const clampD=d=>Math.min(Math.max(d,1),10), clampS=s=>Math.max(s,0.01);
 
 const retrievability=(t,S)=>S<=0?0:Math.pow(1+FACTOR*t/S,DECAY);
@@ -483,44 +493,47 @@ function schedule(card,grade,now,opts){
   }else{
     const r=retrievability(elapsed,card.stability);
     next.difficulty=nextDifficulty(w,card.difficulty,grade);
-    next.stability=grade===1
+    next.stability=grade<=HART
       ? stabilityAfterLapse(w,card.difficulty,card.stability,r)
       : stabilityAfterRecall(w,card.difficulty,card.stability,r,grade);
   }
   const wasReview=card.state==='review';
-  if(grade===1&&wasReview) next.lapses=(card.lapses||0)+1;
+  if(grade<=HART&&wasReview) next.lapses=(card.lapses||0)+1;
 
-  const inLearning=card.state==='new'||card.state==='learning';
-  const inRelearning=card.state==='relearning'||(grade===1&&wasReview);
+  /* ---- Was in dieser Lerneinheit bleibt ------------------------------------
+     „Schwer" bestimmt keinen Abstand. Die Karte kommt nach ein paar anderen
+     Karten zurück, beliebig oft, und verlässt die Einheit erst mit „Gut" oder
+     „Leicht" — der letzte Knopf legt den Abstand fest. Verbucht wird der
+     Fehlversuch trotzdem: einmal als Rückfall (oben), und jedes „Schwer" hebt
+     über nextDifficulty dauerhaft die Schwierigkeit der Karte, wodurch ihre
+     Abstände von allein kürzer bleiben als die einer leichten Karte.
 
-  if(grade===4&&(inLearning||inRelearning)){ next.state='review'; next.step=0; }
-  else if(inLearning){
-    let step=card.state==='new'?0:(card.step||0);
-    if(grade===1) step=0; else if(grade===3) step+=1;
-    if(step>=LEARNING_STEPS.length||!schrittPasst(nowMs,LEARNING_STEPS[step],opts)){
-      next.state='review'; next.step=0; }
-    else{
-      /* „Schwer" lässt den Lernschritt stehen. Bei einer nagelneuen Karte steht
-         er aber schon auf dem ersten — „Nochmal" und „Schwer" zeigten deshalb
-         beide 1 Minute, und der Knopf war wirkungslos. „Schwer" bekommt hier
-         die Mitte zum nächsten Schritt, damit die Leiter durchgehend steigt:
-         1 · 5 · 10 Minuten statt 1 · 1 · 10. */
-      let spanne=LEARNING_STEPS[step];
-      if(grade===2&&step===0&&LEARNING_STEPS.length>1)
-        spanne=Math.max(LEARNING_STEPS[0]+MIN,
-                        Math.floor((LEARNING_STEPS[0]+LEARNING_STEPS[1])/2/MIN)*MIN);
-      next.state='learning'; next.step=step; next.scheduledDays=0;
-      next.due=lernschrittFaellig(nowMs,spanne); return next; }
+     Das ist die Grenze der Regel „nur die letzte Bewertung zählt": sie darf
+     entscheiden, welcher Abstand herauskommt, aber nicht, ob der erste Abruf
+     gelungen ist. Sonst bekäme eine Karte, die gerade nicht abrufbar war,
+     denselben Abstand wie eine, die saß. */
+  if(grade<=HART){
+    next.state=(wasReview||card.state==='relearning')?'relearning':'learning';
+    next.step=card.state==='new'?0:(card.step||0);
+    next.scheduledDays=0;
+    next.due=new Date(tagesBeginn(nowMs)).toISOString();
+    return next;
   }
-  else if(inRelearning){
-    let step=card.state==='relearning'?(card.step||0):0;
-    if(grade===1) step=0; else if(grade===3) step+=1;
-    if(step>=RELEARNING_STEPS.length||!schrittPasst(nowMs,RELEARNING_STEPS[step],opts)){
-      next.state='review'; next.step=0; }
-    else{ next.state='relearning'; next.step=step; next.scheduledDays=0;
-          next.due=lernschrittFaellig(nowMs,RELEARNING_STEPS[step]); return next; }
+
+  /* Neue Karte: zweite Vorlage in derselben Einheit, dann nächster Morgen. */
+  if(card.state==='new'||card.state==='learning'){
+    const stufe=(card.state==='new'?0:(card.step||0))+1;
+    if(stufe<=LERN_STUFEN.length){
+      const tage=LERN_STUFEN[stufe-1];
+      if(tage===0||schrittPasst(nowMs,tage*DAY,opts)){
+        next.state='learning'; next.step=stufe; next.scheduledDays=tage;
+        next.due = tage===0 ? new Date(tagesBeginn(nowMs)).toISOString()
+                            : lernschrittFaellig(nowMs,tage*DAY);
+        return next;
+      }
+    }
   }
-  else{ next.state='review'; next.step=0; }
+  next.state='review'; next.step=0;
 
   let days=Math.min(Math.max(Math.round(intervalForRetention(next.stability,request)),1),maxInterval);
   const examMs=opts.examDate?new Date(opts.examDate).getTime():null;
@@ -971,14 +984,22 @@ function pickNext(){
   const gap=S.settings.retryGap|0;
   const cards=session.pool.map(id=>S.cards.find(c=>c.id===id)).filter(Boolean);
 
-  const retryDue=c=>gap>0&&(c.state==='learning'||c.state==='relearning')&&
-                    session.retry[c.id]!=null&&session.done>=session.retry[c.id];
-  const ready=c=>c.state==='new'||!c.due||new Date(c.due).getTime()<=now||retryDue(c);
-  const soon=c=>c.due&&(c.state==='learning'||c.state==='relearning')&&
-                new Date(c.due).getTime()<=now+20*MIN;
+  /* Eine Karte, die gerade nicht saß, ist für die nächsten `retryGap` Karten
+     gesperrt. Vorher war das eine zusätzliche Freigabe neben der Uhr; seit die
+     Kurzfristphase ohne Minutenschritte auskommt, sind solche Karten sofort
+     fällig — die Sperre ist jetzt das, was sie auseinanderhält. */
+  const gesperrt=c=>session.retry[c.id]!=null&&session.done<session.retry[c.id];
+  const faellig=c=>c.state==='new'||!c.due||new Date(c.due).getTime()<=now;
+  const ready=c=>faellig(c)&&!gesperrt(c);
 
   let cand=cards.filter(ready);
-  if(!cand.length) cand=cards.filter(soon);
+  if(!cand.length){
+    /* Nur noch gesperrte Karten übrig: die am längsten wartende freigeben,
+       statt die Einheit für beendet zu erklären. */
+    const warten=cards.filter(c=>faellig(c)&&gesperrt(c))
+                      .sort((a,b)=>session.retry[a.id]-session.retry[b.id]);
+    if(warten.length) cand=[warten[0]];
+  }
   if(!cand.length){ session.current=null; session.shown=false; return; }
 
   const mix=S.settings.interleave!==false;
@@ -1099,14 +1120,14 @@ function grade(g){
   session.recent.unshift(card.id);
   if(session.recent.length>4) session.recent.pop();
 
-  // Wiedervorlage: nicht erinnert heißt, die Karte kommt noch im selben
-  // Durchgang zurück — und zwar so lange, bis sie zweimal sitzt.
+  /* Wiedervorlage. Alles, was keinen Abstand bekommen hat, bleibt in dieser
+     Einheit — die zweite Vorlage einer neuen Karte genauso wie eine Karte, die
+     gerade nicht saß. Der Abstand schwankt zwischen `retryGap` und +2 Karten,
+     damit nicht immer dieselbe Lücke entsteht; ohne Zufall, damit ein
+     Zurücknehmen denselben Zustand wiederherstellt. */
   const gap=S.settings.retryGap|0;
-  if(gap>0&&g===1) session.retry[card.id]=session.done+gap;
-  else if(g>=3) delete session.retry[card.id];
-  else if(gap>0&&g===2&&(upd.state==='learning'||upd.state==='relearning')){
-    session.retry[card.id]=session.done+gap+2; // "Schwer" kommt etwas später zurück
-  }
+  if(upd.scheduledDays===0&&gap>0) session.retry[card.id]=session.done+gap+(session.done%3);
+  else delete session.retry[card.id];
 
   save(); pickNext(); render();
 }
@@ -1420,15 +1441,19 @@ function viewReview(){
     h+='<button class="btn primary wide" data-act="show" style="margin-top:18px;padding:15px;font-size:16px">'+
        'Antwort zeigen <span class="kbd" style="margin-left:4px">Leer</span></button>';
   }else{
-    const labels={1:'Nochmal',2:'Schwer',3:'Gut',4:'Leicht'};
-    h+='<div class="grades">';
-    for(const g of [1,2,3,4]){
+    /* Drei Knöpfe. Die Beschriftung nennt Tage statt Uhrzeiten — innerhalb
+       eines Tages plant die App nicht mehr nach der Uhr. */
+    const labels={2:'Schwer',3:'Gut',4:'Leicht'};
+    h+='<div class="grades grades-3">';
+    let taste=0;
+    for(const g of [2,3,4]){
       const r=schedule(card,g,now,opts);
-      const delta=new Date(r.due).getTime()-now.getTime();
+      const iv = r.scheduledDays===0 ? 'gleich nochmal'
+               : (r.scheduledDays===1 ? 'morgen' : 'in '+r.scheduledDays+' Tagen');
       h+='<button class="grade" data-act="grade" data-g="'+g+'">'+
          '<span class="lbl">'+labels[g]+'</span>'+
-         '<span class="iv">'+fmtDelta(delta)+'</span>'+
-         '<span class="kbd">'+g+'</span></button>';
+         '<span class="iv">'+iv+'</span>'+
+         '<span class="kbd">'+(++taste)+'</span></button>';
     }
     h+='</div>';
   }
@@ -2355,7 +2380,9 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(e.key===' '||e.key==='Enter'){ e.preventDefault(); grade(3); return; }
-  if(['1','2','3','4'].includes(e.key)){ e.preventDefault(); grade(parseInt(e.key)); }
+  /* Drei Knöpfe: 1 Schwer · 2 Gut · 3 Leicht. Die Zifferntaste zählt die
+     Knöpfe von links, nicht die interne Note. */
+  if(['1','2','3'].includes(e.key)){ e.preventDefault(); grade(parseInt(e.key)+1); }
 });
 
 /* Auf der Statistikseite gibt es nichts zu vergrößern, das Aufziehen mit zwei
