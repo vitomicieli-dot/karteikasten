@@ -207,7 +207,8 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
     per Auslassungspunkten, und der eingestellte Schriftgrad gilt wirklich. */
 .tbl{width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px}
 .tbl td,.tbl th{overflow:hidden}
-.tbl th.c-frage{width:44%}
+.tbl th.c-frage{width:40%}
+.tbl th.c-dat{width:13%}
 /* Drei Stufen für die Kartenliste. Herauszoomen ist keine Lösung: Der Browser
    verkleinert dabei die ganze Oberfläche samt Kopfzeile mit. */
 /* Die Kartenliste wird stufenlos über --lp gesteuert (Schriftgrad in Pixel).
@@ -343,7 +344,8 @@ label.fld > span{display:block;font-size:12.5px;font-weight:580;color:var(--ink-
   .bar .tip{display:none}
   /* Auf dem Telefon sind nur Frage und Zustand sichtbar — dann gehört der
      Frage der Löwenanteil der Breite. */
-  .tbl th.c-frage{width:74%}
+  .tbl th.c-frage{width:50%}
+  .tbl th.c-dat{width:22%}
   .kpi .v{font-size:23px}
 }
 @media print{.no-print{display:none}}
@@ -644,6 +646,15 @@ function save(){
       toast('Speichern fehlgeschlagen — Speicher voll. Bitte sichern und aufräumen, sonst geht dein Fortschritt verloren.',8000); }
     return false;
   }
+}
+
+/* Tag.Monat.Jahr zweistellig — kurz genug, dass die Spalte auf dem iPhone
+   neben Frage und Zustand noch Platz hat. */
+function kurzDatum(ts){
+  if(!ts) return '—';
+  const d=new Date(ts); if(isNaN(d.getTime())) return '—';
+  const zz=n=>String(n).padStart(2,'0');
+  return zz(d.getDate())+'.'+zz(d.getMonth()+1)+'.'+String(d.getFullYear()).slice(-2);
 }
 
 /* Schreibt einen Schritt des Imports mit und speichert ihn sofort. Wichtig:
@@ -1532,7 +1543,7 @@ function viewBrowse(){
   h+='<div class="card" style="padding:14px 6px">'+
      '<table class="tbl frei" style="--lp:'+listPx()+'px"><thead><tr>'+
      '<th class="c-frage">Frage</th><th class="hide-s">Stapel</th><th>Zustand</th>'+
-     '<th class="hide-s">Fällig</th></tr></thead><tbody>';
+     '<th class="c-dat">Angelegt</th><th class="hide-s">Fällig</th></tr></thead><tbody>';
   /* Deckel gegen eine Liste, die den Browser blockiert. Vitos Bestand wächst
      bis zur Prüfung auf ein paar Tausend — 5000 liegt weit darüber. */
   const GRENZE=5000;
@@ -1551,6 +1562,7 @@ function viewBrowse(){
       '<td class="hide-s"><span class="row" style="gap:6px"><span class="dot" style="background:'+
         esc(d?d.color:'#888')+'"></span><span class="truncate" style="max-width:110px">'+esc(d?d.name:'—')+'</span></span></td>'+
       '<td><span class="state-badge st-'+c.state+'">'+stName+'</span></td>'+
+      '<td style="color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap">'+kurzDatum(c.created)+'</td>'+
       '<td class="hide-s" style="color:var(--muted);font-variant-numeric:tabular-nums">'+due+'</td>'+
     '</tr>';
   }
@@ -1834,6 +1846,7 @@ function renderModal(){
   let inner='';
   if(modal.type==='card') inner=modalCard();
   else if(modal.type==='deck') inner=modalDeck();
+  else if(modal.type==='lernvorschau') inner=modalLernvorschau();
   else if(modal.type==='paste') inner=modalPaste();
   else if(modal.type==='confirm') inner=modalConfirm();
   return '<div class="modal-bg" data-act="modal-bg"><div class="modal">'+inner+'</div></div>';
@@ -1896,7 +1909,44 @@ function modalCard(){
       '<div class="spacer"></div>'+
       '<button class="btn ghost" data-act="close-modal">Abbrechen</button>'+
       '<button class="btn primary" data-act="save-card">Sichern</button>'+
-    '</div>';
+    '</div>'+
+    '<button class="btn wide" data-act="lern-vorschau" style="margin-top:10px">Lernvorschau</button>';
+}
+
+/* Zeigt die Karte genau so, wie sie in der Lernansicht erscheint: erst die
+   Frage, die Antwort erst auf Tipp — mit Bildern, Plaketten und Erläuterung.
+   Gearbeitet wird mit dem, was gerade in den Feldern steht, nicht mit dem
+   gespeicherten Stand; sonst prüft man die alte Fassung. */
+function modalLernvorschau(){
+  const c=modal.card, deck=deckById(c.deckId);
+  let pills='<span class="pill"><span class="dot" style="background:'+esc(deck?deck.color:'#888')+'"></span>'+
+            esc(deck?deck.name:'Ohne Stapel')+'</span>';
+  if((c.tags||[]).length) pills+='<span class="pill">'+esc(c.tags[0])+'</span>';
+  if(c.type==='concept')
+    pills+='<span class="pill" style="background:rgba(217,89,38,.16);color:#d95926">Zusammenhang</span>';
+
+  let h='<h2>Lernvorschau</h2>'+
+    '<div class="qcard"><div class="pillrow">'+pills+'</div>'+
+    '<div class="qtext">'+fmt(c.front||'')+'</div>';
+  if(modal.auf){
+    h+='<div class="divider"></div><div class="atext">'+fmt(c.back||'')+'</div>';
+    if(c.note) h+='<div class="anote">'+fmt(c.note)+'</div>';
+    const extra=(c.tags||[]).slice(1);
+    if(extra.length) h+='<div class="tagrow">'+extra.map(t=>'<span class="pill">'+esc(t)+'</span>').join('')+'</div>';
+  }else if(c.type==='concept'){
+    h+='<div class="hint" style="margin-top:18px">Erkläre es dir laut in eigenen Worten, bevor du aufdeckst.</div>';
+  }
+  h+='</div>';
+
+  if(!modal.auf)
+    h+='<button class="btn primary wide" data-act="vorschau-auf" style="margin-top:16px;padding:14px;font-size:16px">Antwort zeigen</button>';
+  else
+    h+='<div class="hint" style="text-align:center;margin-top:14px">So sieht die Karte beim Lernen aus. '+
+       'Die drei Knöpfe zum Bewerten gibt es hier nicht — die Vorschau ändert deinen Lernstand nicht.</div>';
+
+  h+='<div class="modal-actions" style="margin-top:16px"><div class="spacer"></div>'+
+     '<button class="btn" data-act="vorschau-zurueck">Zurück zum Bearbeiten</button></div>';
+  return h;
 }
 function modalDeck(){
   const d=modal.deck, isNew=!d.id;
@@ -2314,6 +2364,23 @@ function handle(a,el){
       modal={type:'card',card:{deckId:dId,type:'basic',front:'',back:'',note:'',tags:[]}}; render(); break;
     }
     case 'edit-card': { const c=S.cards.find(x=>x.id===id); if(c) modal={type:'card',card:Object.assign({},c)}; render(); break; }
+    case 'lern-vorschau': {
+      /* Erst die Felder einsammeln, sonst zeigt die Vorschau den Stand von
+         vor der Bearbeitung. */
+      const g=id2=>{ const e=document.getElementById(id2); return e?e.value:''; };
+      modal.card=Object.assign({},modal.card,{
+        deckId:g('m-deck')||modal.card.deckId,
+        type:g('m-type')||modal.card.type,
+        front:(g('m-front')||'').trim(),
+        back:(g('m-back')||'').trim(),
+        note:(g('m-note')||'').trim(),
+        tags:(g('m-tags')||'').split(',').map(t=>t.trim()).filter(Boolean)
+      });
+      modal={type:'lernvorschau',card:modal.card,auf:false};
+      render(); break;
+    }
+    case 'vorschau-auf': modal.auf=true; render(); break;
+    case 'vorschau-zurueck': modal={type:'card',card:modal.card}; render(); break;
     case 'save-card': {
       const front=(document.getElementById('m-front').value||'').trim();
       const back=(document.getElementById('m-back').value||'').trim();
