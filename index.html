@@ -646,6 +646,20 @@ function save(){
   }
 }
 
+/* Schreibt einen Schritt des Imports mit und speichert ihn sofort. Wichtig:
+   iOS kann eine Web-App beim Zurückkommen aus dem Dateifenster neu laden —
+   ein nur im Arbeitsspeicher gehaltenes Protokoll wäre dann weg. */
+function impLog(txt){
+  try{
+    S.settings.importLog = S.settings.importLog || [];
+    const t = new Date();
+    const zz = n => String(n).padStart(2,'0');
+    S.settings.importLog.push(zz(t.getHours())+':'+zz(t.getMinutes())+':'+zz(t.getSeconds())+'  '+txt);
+    if(S.settings.importLog.length>12) S.settings.importLog=S.settings.importLog.slice(-12);
+    localStorage.setItem(LS,JSON.stringify(S));
+  }catch(e){ /* Protokoll darf den Import nie aufhalten */ }
+}
+
 /* ==========================================================================
    3. Hilfsfunktionen
    ========================================================================== */
@@ -1750,6 +1764,7 @@ function viewSettings(){
     '<p class="hint" style="margin:12px 0 0">Die Sicherung enthält Stapel, Karten und deinen kompletten Lernstand. '+
     'Sie landet dort, wo du sie im Fenster von iOS ablegst — sinnvollerweise im Ordner <b>Sicherungen</b>.</p>'+
     '<p class="hint" style="margin:8px 0 0">'+sicherungStand()+'</p>'+
+    importProtokollHtml()+
     '</div>';
 
   const sc=sicherungCfg();
@@ -1840,6 +1855,19 @@ function mitwachsen(el){
   if(!el) return;
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight+2,520)+'px';
+}
+
+/* Zeigt, wie weit der letzte Import gekommen ist. Die kurze Meldung am
+   unteren Rand verschwindet nach fünf Sekunden und wird auf dem iPhone
+   regelmäßig übersehen — hier bleibt sie stehen, bis der nächste Import läuft. */
+function importProtokollHtml(){
+  const l = (S.settings && S.settings.importLog) || [];
+  if(!l.length) return '';
+  return '<div style="margin:12px 0 0;padding:10px 12px;background:var(--surface-2);'+
+    'border:1px solid var(--line-2);border-radius:9px">'+
+    '<div class="hint" style="margin:0 0 6px"><b>Letzter Import</b></div>'+
+    '<div class="hint" style="margin:0;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.7">'+
+    l.map(esc).join('<br>')+'</div></div>';
 }
 
 function modalCard(){
@@ -2046,17 +2074,39 @@ function sicherungPruefen(){
 }
 
 function doImportFile(){
+  S.settings.importLog=[]; impLog('Dateifenster geoeffnet');
   const inp=document.createElement('input');
-  inp.type='file'; inp.accept='.json,application/json';
-  inp.onchange=()=>{
-    const f=inp.files&&inp.files[0]; if(!f) return;
+  inp.type='file';
+  /* Kein accept-Filter: iOS 27 sperrt damit gelegentlich Dateien, die es
+     nicht sicher einordnen kann. Der Inhalt wird ohnehin geprueft. */
+  inp.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+  /* Das Feld MUSS in der Seite haengen. Ein freistehendes Element loest in
+     neueren WebKit-Versionen kein change-Ereignis mehr aus — genau daran ist
+     der Import am 28.09.2026 gescheitert. */
+  document.body.appendChild(inp);
+
+  const aufraeumen=()=>{ try{ inp.remove(); }catch(e){} };
+
+  inp.addEventListener('cancel',()=>{ impLog('abgebrochen — keine Datei gewaehlt'); aufraeumen(); });
+  inp.addEventListener('change',()=>{
+    const f=inp.files&&inp.files[0];
+    if(!f){ impLog('change ohne Datei'); aufraeumen(); return; }
+    impLog('Datei gewaehlt: '+f.name+' ('+f.size+' Bytes)');
     const rd=new FileReader();
+    rd.onerror=()=>{ impLog('Lesefehler'); toast('Datei konnte nicht gelesen werden.',5000); aufraeumen(); };
     rd.onload=()=>{
-      try{ importData(JSON.parse(rd.result)); }
-      catch(e){ toast('Datei konnte nicht gelesen werden: '+e.message,5000); }
+      const txt=String(rd.result||'');
+      impLog('gelesen: '+txt.length+' Zeichen');
+      let daten;
+      try{ daten=JSON.parse(txt); }
+      catch(e){ impLog('JSON ungueltig: '+e.message); toast('Datei ist kein gueltiges JSON.',5000); aufraeumen(); return; }
+      impLog('JSON gueltig');
+      try{ importData(daten); }
+      catch(e){ impLog('Import abgebrochen: '+e.message); toast('Import nicht moeglich: '+e.message,5000); }
+      aufraeumen();
     };
     rd.readAsText(f);
-  };
+  });
   inp.click();
 }
 
@@ -2129,10 +2179,17 @@ function importData(data){
       vorhanden.set(front.toLowerCase(),S.cards[S.cards.length-1]);
     }
   }
-  save(); view='home'; render();
-  toast(added+' Karten übernommen'+(updated?' · '+updated+' aktualisiert':'')+
+  const bilanz = added+' Karten übernommen'+(updated?' · '+updated+' aktualisiert':'')+
         (newDecks?', '+newDecks+' Stapel neu angelegt':'')+
-        (skipped?' · '+skipped+' übersprungen (Dublette oder unvollständig)':''),5000);
+        (skipped?' · '+skipped+' übersprungen (Dublette oder unvollständig)':'');
+  const gespeichert = save();
+  view='home'; render();
+  impLog(bilanz+(gespeichert?'':' — ABER NICHT GESPEICHERT'));
+  /* Bei vollem Speicher hat save() schon gewarnt. Diese Warnung darf nicht von
+     der Erfolgsmeldung überschrieben werden — sonst sieht man nie, dass der
+     Import gar nicht auf der Platte gelandet ist. */
+  if(gespeichert) toast(bilanz,5000);
+  else toast('Speicher voll: '+bilanz+', aber NICHT gespeichert.',9000);
 }
 
 /* ==========================================================================
