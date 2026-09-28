@@ -1229,8 +1229,46 @@ function render(){
   else if(view==='stats') body=viewStats();
   else if(view==='settings') body=viewSettings();
   else body=viewHome();
+  /* Die Scrollhöhe MUSS vor dem Austausch des Inhalts gelesen werden: Sobald
+     innerHTML neu gesetzt ist, fällt die Seitenhöhe kurz zusammen und der
+     Browser kappt scrollY auf 0. */
+  const yVorher = seiteIstGesperrt ? seitenY : (window.scrollY||window.pageYOffset||0);
   app.innerHTML=header()+'<main>'+body+'</main>'+(modal?renderModal():'');
+  seiteSperren(!!modal, yVorher);
   bind();
+  /* Beim Sprung zwischen Bearbeiten und Lernvorschau soll der Dialog dort
+     weiterlaufen, wo er verlassen wurde — sonst steht man oben und sucht den
+     Knopf, den man gerade gedrückt hat. */
+  if(modal && modalScroll){
+    const m=document.querySelector('.modal');
+    if(m) m.scrollTop=modalScroll;
+    modalScroll=0;
+  }
+}
+
+/* Solange ein Dialog offen ist, wird die Seite dahinter festgesetzt. Auf dem
+   iPhone wanderte sonst eine Wischbewegung, die im Dialog nichts mehr zu
+   scrollen fand, auf die Seite dahinter — der Dialog reagierte danach nicht
+   mehr sinnvoll und die App musste neu gestartet werden (28.09.2026).
+   Gemerkt wird die Scrollhöhe, damit man nach dem Schließen wieder an
+   derselben Stelle der Kartenliste steht. */
+let seitenY=0, seiteIstGesperrt=false, modalScroll=0;
+function seiteSperren(an,y){
+  const b=document.body;
+  if(an && !seiteIstGesperrt){
+    seitenY=y||0;
+    b.style.position='fixed';
+    b.style.top=(-seitenY)+'px';
+    b.style.left='0'; b.style.right='0'; b.style.width='100%';
+    seiteIstGesperrt=true;
+  }else if(!an && seiteIstGesperrt){
+    b.style.position=''; b.style.top=''; b.style.left=''; b.style.right=''; b.style.width='';
+    seiteIstGesperrt=false;
+    /* Erst den Umbruch erzwingen: Ohne das steht die neue Seitenhöhe noch
+       nicht fest und der Browser kappt die Sprungmarke auf das alte Maß. */
+    void b.offsetHeight;
+    window.scrollTo(0,seitenY);
+  }
 }
 
 function header(){
@@ -2376,11 +2414,20 @@ function handle(a,el){
         note:(g('m-note')||'').trim(),
         tags:(g('m-tags')||'').split(',').map(t=>t.trim()).filter(Boolean)
       });
-      modal={type:'lernvorschau',card:modal.card,auf:false};
+      const mEl=document.querySelector('.modal');
+      modalScroll=0;
+      modal={type:'lernvorschau',card:modal.card,auf:false,zurueckScroll:mEl?mEl.scrollTop:0};
       render(); break;
     }
-    case 'vorschau-auf': modal.auf=true; render(); break;
-    case 'vorschau-zurueck': modal={type:'card',card:modal.card}; render(); break;
+    case 'vorschau-auf': {
+      const mEl=document.querySelector('.modal');
+      if(mEl) modalScroll=mEl.scrollTop;
+      modal.auf=true; render(); break;
+    }
+    case 'vorschau-zurueck':
+      modalScroll=modal.zurueckScroll||0;
+      modal={type:'card',card:modal.card};
+      render(); break;
     case 'save-card': {
       const front=(document.getElementById('m-front').value||'').trim();
       const back=(document.getElementById('m-back').value||'').trim();
