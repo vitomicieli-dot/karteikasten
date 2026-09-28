@@ -3,7 +3,7 @@
    Programmdateien und die Bilder zwischengespeichert — Karten und Lernstand
    liegen im localStorage und werden hier nicht angefasst. */
 
-const CACHE = 'karteikasten-v13';
+const CACHE = 'karteikasten-v14';
 
 /* Ohne diese Dateien läuft die App nicht. Schlägt eine fehl, scheitert die
    Installation — das ist gewollt, ein halber Cache wäre schlimmer. */
@@ -20,7 +20,11 @@ const BILDER = [
   './bilder/break-even.png',
   './bilder/regelkreis.jpg',
   './bilder/heizkreis.jpg',
-  './bilder/bearbeitungszentrum.jpg'
+  './bilder/bearbeitungszentrum.jpg',
+  './bilder/portfolio-matrix.jpg',
+  './bilder/portfolio-beispiel.jpg',
+  './bilder/swot-profil.jpg',
+  './bilder/eu-institutionen.jpg'
 ];
 
 self.addEventListener('install', e => {
